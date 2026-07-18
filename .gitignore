@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Turborepo
+.turbo/
+
+# Env
+.env
+.env.local
+.env.*.local
+!.env.example
+.env.example
+.env.local.example
+
+# Prisma
+packages/database/prisma/migrations/dev.db*
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Misc
+*.tsbuildinfo
