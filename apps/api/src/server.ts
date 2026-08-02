@@ -1,6 +1,9 @@
 import "dotenv/config";
-import express, { type Request, type Response, type NextFunction } from "express";
+import express from "express";
 import cors from "cors";
+import routes from "./routes/index.js";
+import { notFoundHandler } from "./middlewares/notFound.middleware.js";
+import { errorHandler } from "./middlewares/errorHandler.middleware.js";
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
@@ -8,23 +11,10 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
 app.use(cors());
 app.use(express.json());
 
-app.get("/health", (_req: Request, res: Response) => {
-  res.status(200).json({ status: "ok", service: "ai-creative-hub-api" });
-});
+app.use(routes);
 
-// TODO: auth route'lari shu yerga ulanadi (apps/api/src/routes/auth.ts)
-// app.use("/api/auth", authRouter);
-
-// 404 handler
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: "Route topilmadi" });
-});
-
-// Global error handler
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(err);
-  res.status(500).json({ error: "Serverda kutilmagan xatolik" });
-});
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`✅ API server ishga tushdi: http://localhost:${PORT}`);
