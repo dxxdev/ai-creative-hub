@@ -1,2 +1,4 @@
-// @ai-creative-hub/shared — Zod sxemalar va umumiy TS tiplar shu yerda eksport qilinadi
-export {};
+// @repo/shared — apps/api va apps/web o'rtasida umumiy Zod sxemalar va TS tiplar
+
+export * from "./types";
+export * from "./schemas";

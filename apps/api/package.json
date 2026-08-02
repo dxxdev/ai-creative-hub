@@ -12,7 +12,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-creative-hub/shared": "workspace:*",
+    "@repo/shared": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1"

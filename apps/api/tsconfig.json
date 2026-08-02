@@ -19,8 +19,8 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@ai-creative-hub/shared": ["../../packages/shared/src"],
-      "@ai-creative-hub/shared/*": ["../../packages/shared/src/*"]
+      "@repo/shared": ["../../packages/shared/src"],
+      "@repo/shared/*": ["../../packages/shared/src/*"]
     }
   },
   "include": ["src"],

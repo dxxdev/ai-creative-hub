@@ -10,7 +10,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-creative-hub/shared": "workspace:*",
+    "@repo/shared": "workspace:*",
     "next": "^15.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
