@@ -1,0 +1,15 @@
+{
+  "name": "@ai-creative-hub/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "dev": "echo \"shared dev: hali sozlanmagan\" && exit 0",
+    "build": "echo \"shared build: hali sozlanmagan\" && exit 0",
+    "lint": "echo \"shared lint: hali sozlanmagan\" && exit 0"
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
+  }
+}
