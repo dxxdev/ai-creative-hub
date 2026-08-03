@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@repo/shared": "workspace:*",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "zod": "^3.23.0",
     "dotenv": "^16.4.5",

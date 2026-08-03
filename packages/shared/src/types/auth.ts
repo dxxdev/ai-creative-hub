@@ -12,6 +12,6 @@ export interface AuthTokens {
  * Login/register endpoint'ining to'liq javob shakli.
  */
 export interface AuthResponse {
-  user: import("./user").PublicUser;
+  user: import("./user.js").PublicUser;
   tokens: AuthTokens;
 }
