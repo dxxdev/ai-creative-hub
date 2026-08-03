@@ -12,5 +12,15 @@ services:
     volumes:
       - ai-creative-hub-db-data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: ai-creative-hub-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - ai-creative-hub-redis-data:/data
+
 volumes:
   ai-creative-hub-db-data:
+  ai-creative-hub-redis-data:
