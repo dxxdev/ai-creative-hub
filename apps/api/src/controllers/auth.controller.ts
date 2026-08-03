@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { RegisterSchema } from "@repo/shared";
 import { registerUser, EmailAlreadyExistsError } from "../services/auth.service.js";
 
-export async function register(req: Request, res: Response): Promise<void> {
+export async function registerHandler(req: Request, res: Response): Promise<void> {
   const parsed = RegisterSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -30,6 +30,7 @@ export async function register(req: Request, res: Response): Promise<void> {
       res.status(409).json({ error: err.message });
       return;
     }
+
     console.error("Register xatosi:", err);
     res.status(500).json({ error: "Ro'yxatdan o'tishda kutilmagan xatolik yuz berdi" });
   }
