@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
+import { verifyEmailOtp } from "./otp.service.js";
 
 const SALT_ROUNDS = 12;
 
@@ -8,6 +9,32 @@ export class EmailAlreadyExistsError extends Error {
     super("Bu email allaqachon ro'yxatdan o'tgan");
     this.name = "EmailAlreadyExistsError";
   }
+}
+
+export class UserNotFoundError extends Error {
+  constructor() {
+    super("Foydalanuvchi topilmadi");
+    this.name = "UserNotFoundError";
+  }
+}
+
+export class EmailAlreadyVerifiedError extends Error {
+  constructor() {
+    super("Email allaqachon tasdiqlangan");
+    this.name = "EmailAlreadyVerifiedError";
+  }
+}
+
+export class InvalidOrExpiredOtpError extends Error {
+  constructor() {
+    super("Noto'g'ri yoki muddati o'tgan tasdiqlash kodi");
+    this.name = "InvalidOrExpiredOtpError";
+  }
+}
+
+export interface VerifyUserEmailInput {
+  email: string;
+  otpCode: string;
 }
 
 function generateUsernameFromEmail(email: string): string {
@@ -40,5 +67,20 @@ export async function registerUser(input: RegisterUserInput) {
 
   return prisma.user.create({
     data: { email: input.email, username, passwordHash, status: "PENDING_VERIFICATION" },
+  });
+}
+
+export async function verifyUserEmail(input: VerifyUserEmailInput) {
+  const user = await prisma.user.findUnique({ where: { email: input.email } });
+  if (!user) throw new UserNotFoundError();
+
+  if (user.status === "ACTIVE") throw new EmailAlreadyVerifiedError();
+
+  const isValid = await verifyEmailOtp(user.id, input.otpCode);
+  if (!isValid) throw new InvalidOrExpiredOtpError();
+
+  return prisma.user.update({
+    where: { id: user.id },
+    data: { status: "ACTIVE" },
   });
 }

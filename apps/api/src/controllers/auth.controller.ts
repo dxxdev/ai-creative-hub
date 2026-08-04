@@ -3,6 +3,13 @@ import type { RegisterInput } from "@repo/shared";
 import { registerUser, EmailAlreadyExistsError } from "../services/auth.service.js";
 import { createEmailVerificationOtp } from "../services/otp.service.js";
 import { queueOtpEmail } from "../queues/email.queue.js";
+import type { VerifyEmailInput } from "@repo/shared";
+import {
+  verifyUserEmail,
+  UserNotFoundError,
+  EmailAlreadyVerifiedError,
+  InvalidOrExpiredOtpError,
+} from "../services/auth.service.js";
 
 export async function registerHandler(req: Request, res: Response): Promise<void> {
   const body = req.body as RegisterInput;
@@ -37,5 +44,43 @@ export async function registerHandler(req: Request, res: Response): Promise<void
 
     console.error("Register xatosi:", err);
     res.status(500).json({ error: "Ro'yxatdan o'tishda kutilmagan xatolik yuz berdi" });
+  }
+}
+
+export async function verifyEmailHandler(req: Request, res: Response): Promise<void> {
+  const body = req.body as VerifyEmailInput;
+
+  try {
+    const user = await verifyUserEmail({
+      email: body.email,
+      otpCode: body.otpCode,
+    });
+
+    res.status(200).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        status: user.status,
+      },
+    });
+  } catch (err) {
+    if (err instanceof UserNotFoundError) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+
+    if (err instanceof EmailAlreadyVerifiedError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+
+    if (err instanceof InvalidOrExpiredOtpError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+
+    console.error("Emailni tasdiqlash xatosi:", err);
+    res.status(500).json({ error: "Emailni tasdiqlashda kutilmagan xatolik yuz berdi" });
   }
 }

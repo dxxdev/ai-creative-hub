@@ -22,6 +22,19 @@ export const RegisterSchema = z
     path: ["confirmPassword"],
   });
 
+export const VerifyEmailSchema = z.object({
+  email: z.string().email("Email manzili noto'g'ri formatda"),
+  otpCode: z
+    .string()
+    .length(6, "Tasdiqlash kodi aynan 6 xonadan iborat bo'lishi kerak")
+    .regex(
+      /^\d{6}$/,
+      "Tasdiqlash kodi faqat raqamlardan iborat bo'lishi kerak",
+    ),
+});
+
+export type VerifyEmailInput = z.infer<typeof VerifyEmailSchema>;
+
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 
 // TODO: Login so'rov sxemasi shu yerga qo'shiladi
