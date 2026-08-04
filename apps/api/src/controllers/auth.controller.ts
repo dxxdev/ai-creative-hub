@@ -1,19 +1,16 @@
 import type { Request, Response } from "express";
-import { RegisterSchema } from "@repo/shared";
+import type { RegisterInput } from "@repo/shared";
 import { registerUser, EmailAlreadyExistsError } from "../services/auth.service.js";
 
+// Bu handler faqat validateSchema(RegisterSchema) middleware'idan o'tgandan
+// keyin ishga tushadi, shuning uchun req.body allaqachon RegisterInput shakliga mos.
 export async function registerHandler(req: Request, res: Response): Promise<void> {
-  const parsed = RegisterSchema.safeParse(req.body);
-
-  if (!parsed.success) {
-    res.status(400).json({ errors: parsed.error.flatten().fieldErrors });
-    return;
-  }
+  const body = req.body as RegisterInput;
 
   try {
     const user = await registerUser({
-      email: parsed.data.email,
-      password: parsed.data.password,
+      email: body.email,
+      password: body.password,
     });
 
     res.status(201).json({
