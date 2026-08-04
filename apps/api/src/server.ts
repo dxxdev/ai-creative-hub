@@ -5,6 +5,7 @@ import { notFoundHandler } from "./middlewares/notFound.middleware.js";
 import { errorHandler } from "./middlewares/errorHandler.middleware.js";
 import { env } from "./config/env.js";
 import "./lib/redis.js";
+import "./queues/email.queue.js";
 
 const app = express();
 
