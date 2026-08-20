@@ -207,3 +207,25 @@ export async function refreshAccessToken(refreshTokenFromCookie: string){
   return { accessToken };
 
 }
+
+export async function logout(refreshTokenFromCookie: string) {
+  let payload;
+  try {
+    payload = verifyRefreshToken(refreshTokenFromCookie);
+  } catch {
+    return;
+  }
+
+  const sessions = await prisma.session.findMany({
+    where: { userId: payload.userId },
+    select: { id: true, refreshTokenHash: true },
+  });
+
+  for (const session of sessions) {
+    const isMatch = await bcrypt.compare(refreshTokenFromCookie, session.refreshTokenHash);
+    if (isMatch) {
+      await prisma.session.delete({ where: { id: session.id } });
+      break;
+    }
+  }
+}
