@@ -8,6 +8,7 @@ import type { LoginInput } from '@repo/shared';
 
 
 const SALT_ROUNDS = 12;
+const REFRESH_TOKEN_TTL_DAYS = 30;
 
 export class EmailAlreadyExistsError extends Error {
   constructor() {
@@ -40,6 +41,11 @@ export class InvalidOrExpiredOtpError extends Error {
 export interface VerifyUserEmailInput {
   email: string;
   otpCode: string;
+}
+
+interface LoginMeta {
+  userAgent?: string,
+  ipAddress?: string;
 }
 
 function generateUsernameFromEmail(email: string): string {
@@ -90,7 +96,7 @@ export async function verifyUserEmail(input: VerifyUserEmailInput) {
   });
 }
 
-export async function login({ email, password }: LoginInput) {
+export async function login({ email, password }: LoginInput, meta: LoginMeta) {
   const user = await prisma.user.findUnique({
     where: { email },
     select: {
@@ -119,6 +125,21 @@ export async function login({ email, password }: LoginInput) {
   const { accessToken, refreshToken } = generateTokenPair({
     userId: user.id,
     email: user.email,
+  });
+
+  const refreshTokenHash = await bcrypt.hash(refreshToken, SALT_ROUNDS);
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_TTL_DAYS);
+  
+  await prisma.session.create({
+    data: {
+      userId: user.id,
+      refreshTokenHash,
+      userAgent: meta.userAgent ?? null,
+      ipAddress: meta.ipAddress ?? null,
+      expiresAt,
+    },
   });
 
   return {
