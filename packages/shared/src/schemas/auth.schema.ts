@@ -33,9 +33,15 @@ export const VerifyEmailSchema = z.object({
     ),
 });
 
+export const resendVerificationSchema = z.object({
+  email: z.string().email(),
+})
+
 export type VerifyEmailInput = z.infer<typeof VerifyEmailSchema>;
 
 export type RegisterInput = z.infer<typeof RegisterSchema>;
+
+export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
 
 // TODO: Login so'rov sxemasi shu yerga qo'shiladi
 // Masalan: export const LoginSchema = z.object({ ... });
