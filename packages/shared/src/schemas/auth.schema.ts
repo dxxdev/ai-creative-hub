@@ -35,13 +35,27 @@ export const VerifyEmailSchema = z.object({
 
 export const resendVerificationSchema = z.object({
   email: z.string().email(),
+});
+
+export const verifyOtpSchema = z.object({
+  userId: z.string().uuid(),
+  otp: z.string().length(6),
 })
+
+export const loginSchema = z.object({
+  email: z.string().email('Email formati noto\'g\'ri'),
+  password: z.string().min(8, 'Parol kamida 8 belgidan iborat bo\'lishi kerak'),
+});
 
 export type VerifyEmailInput = z.infer<typeof VerifyEmailSchema>;
 
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 
 export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
+
+export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
+
+export type LoginInput = z.infer<typeof loginSchema>;
 
 // TODO: Login so'rov sxemasi shu yerga qo'shiladi
 // Masalan: export const LoginSchema = z.object({ ... });

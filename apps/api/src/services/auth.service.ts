@@ -1,6 +1,11 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
 import { verifyEmailOtp } from "./otp.service.js";
+import { UserStatus } from '@prisma/client';
+import { AppError } from '../utils/AppError.js';
+import { generateTokenPair } from './token.service.js';
+import type { LoginInput } from '@repo/shared';
+
 
 const SALT_ROUNDS = 12;
 
@@ -83,4 +88,46 @@ export async function verifyUserEmail(input: VerifyUserEmailInput) {
     where: { id: user.id },
     data: { status: "ACTIVE" },
   });
+}
+
+export async function login({ email, password }: LoginInput) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      email: true,
+      passwordHash: true,
+      status: true,
+    },
+  });
+
+  // Xavfsizlik uchun: email topilmadimi yoki parol noto'g'rimi — bir xil xato xabari
+  if (!user) {
+    throw new AppError('Email yoki parol noto\'g\'ri', 401);
+  }
+
+  const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+
+  if (!isPasswordValid) {
+    throw new AppError('Email yoki parol noto\'g\'ri', 401);
+  }
+
+  if (user.status !== UserStatus.ACTIVE) {
+    throw new AppError('Email hali tasdiqlanmagan. Iltimos, emailingizni tasdiqlang', 403);
+  }
+
+  const { accessToken, refreshToken } = generateTokenPair({
+    userId: user.id,
+    email: user.email,
+  });
+
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      status: user.status,
+    },
+    accessToken,
+    refreshToken,
+  };
 }
