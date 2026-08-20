@@ -6,9 +6,11 @@ import { errorHandler } from "./middlewares/errorHandler.middleware.js";
 import { env } from "./config/env.js";
 import "./lib/redis.js";
 import "./queues/email.queue.js";
+import cookieParser from "cookie-parser";
 
 const app = express();
 
+app.use(cookieParser())
 app.use(cors());
 app.use(express.json());
 

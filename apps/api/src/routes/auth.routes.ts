@@ -5,6 +5,7 @@ import { registerHandler, verifyEmailHandler } from "../controllers/auth.control
 import { verifyOtpController } from "src/modules/auth/verifyOtp.controller.js";
 import { resendVerificationController } from "src/modules/auth/resendVerification.controller.js";
 import { loginController } from "src/modules/auth/login.controller.js";
+import { refreshController } from "src/modules/auth/refresh.controller.js";
 
 const router = Router();
 
@@ -13,5 +14,6 @@ router.post("/register", validateSchema(RegisterSchema), registerHandler);
 router.post("/verify-email", validateSchema(VerifyEmailSchema), verifyEmailHandler);
 router.post("/verify-otp", verifyOtpController);
 router.post("/resend-verification", resendVerificationController)
+router.post('/refresh', refreshController);
 
 export default router;

@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { verifyEmailOtp } from "./otp.service.js";
 import { UserStatus } from '@prisma/client';
 import { AppError } from '../utils/AppError.js';
-import { generateTokenPair } from './token.service.js';
+import { generateAccessToken, generateTokenPair, verifyRefreshToken } from './token.service.js';
 import type { LoginInput } from '@repo/shared';
 
 
@@ -151,4 +151,59 @@ export async function login({ email, password }: LoginInput, meta: LoginMeta) {
     accessToken,
     refreshToken,
   };
+}
+
+export async function refreshAccessToken(refreshTokenFromCookie: string){
+  let payload;
+  try{
+    payload = verifyRefreshToken(refreshTokenFromCookie);
+  } catch{
+    throw new AppError("Refresh token yaroqsiz yoki muddati tugagan", 401);
+  }
+
+  const sessions = await prisma.session.findMany({
+    where: {
+      userId: payload.userId,
+      expiresAt: { gt: new Date() },
+    },
+    select: {
+      id: true,
+      refreshTokenHash: true
+    }
+  });
+
+  if (sessions.length === 0) {
+    throw new AppError("Sessiya topilmadi yoki muddati tugagan", 401);
+  }
+
+  let matchedSession: { id: string } | null = null;
+
+  for(const session of sessions){
+    const isMatch = await bcrypt.compare(refreshTokenFromCookie, session.refreshTokenHash);
+    if (isMatch) {
+      matchedSession = { id: session.id };
+      break;
+    }
+  }
+
+  if (!matchedSession) {
+    throw new AppError('Refresh token yaroqsiz', 401);
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: { id: true, email: true, status: true },
+  });
+
+  if (!user || user.status !== 'ACTIVE') {
+    throw new AppError('Foydalanuvchi topilmadi yoki faol emas', 401);
+  }
+
+  const accessToken = generateAccessToken({
+    userId: user.id,
+    email: user.email,
+  });
+
+  return { accessToken };
+
 }
