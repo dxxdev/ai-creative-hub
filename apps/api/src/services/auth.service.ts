@@ -1,14 +1,21 @@
 import bcrypt from "bcryptjs";
+import crypto from 'node:crypto';
 import { prisma } from "../lib/prisma.js";
 import { verifyEmailOtp } from "./otp.service.js";
-import { UserStatus } from '@prisma/client';
-import { AppError } from '../utils/AppError.js';
-import { generateAccessToken, generateTokenPair, verifyRefreshToken } from './token.service.js';
-import type { LoginInput } from '@repo/shared';
-
+import { UserStatus } from "@prisma/client";
+import { AppError } from "../utils/AppError.js";
+import {
+  generateAccessToken,
+  generateTokenPair,
+  verifyRefreshToken,
+} from "./token.service.js";
+import type { LoginInput } from "@repo/shared";
+import redis from "src/lib/redis.js";
+import { queuePasswordResetEmail } from "src/queues/email.queue.js";
 
 const SALT_ROUNDS = 12;
 const REFRESH_TOKEN_TTL_DAYS = 30;
+const PASSWORD_RESET_TTL_SECONDS = 30 * 60;
 
 export class EmailAlreadyExistsError extends Error {
   constructor() {
@@ -44,13 +51,16 @@ export interface VerifyUserEmailInput {
 }
 
 interface LoginMeta {
-  userAgent?: string,
+  userAgent?: string;
   ipAddress?: string;
 }
 
 function generateUsernameFromEmail(email: string): string {
   const base =
-    email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "") || "user";
+    email
+      .split("@")[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "") || "user";
   const suffix = Math.random().toString(36).slice(2, 6);
   return `${base}_${suffix}`;
 }
@@ -58,7 +68,9 @@ function generateUsernameFromEmail(email: string): string {
 async function findAvailableUsername(email: string): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = generateUsernameFromEmail(email);
-    const taken = await prisma.user.findUnique({ where: { username: candidate } });
+    const taken = await prisma.user.findUnique({
+      where: { username: candidate },
+    });
     if (!taken) return candidate;
   }
   return `${generateUsernameFromEmail(email)}_${Date.now()}`;
@@ -70,14 +82,21 @@ export interface RegisterUserInput {
 }
 
 export async function registerUser(input: RegisterUserInput) {
-  const existing = await prisma.user.findUnique({ where: { email: input.email } });
+  const existing = await prisma.user.findUnique({
+    where: { email: input.email },
+  });
   if (existing) throw new EmailAlreadyExistsError();
 
   const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
   const username = await findAvailableUsername(input.email);
 
   return prisma.user.create({
-    data: { email: input.email, username, passwordHash, status: "PENDING_VERIFICATION" },
+    data: {
+      email: input.email,
+      username,
+      passwordHash,
+      status: "PENDING_VERIFICATION",
+    },
   });
 }
 
@@ -109,17 +128,20 @@ export async function login({ email, password }: LoginInput, meta: LoginMeta) {
 
   // Xavfsizlik uchun: email topilmadimi yoki parol noto'g'rimi — bir xil xato xabari
   if (!user) {
-    throw new AppError('Email yoki parol noto\'g\'ri', 401);
+    throw new AppError("Email yoki parol noto'g'ri", 401);
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
   if (!isPasswordValid) {
-    throw new AppError('Email yoki parol noto\'g\'ri', 401);
+    throw new AppError("Email yoki parol noto'g'ri", 401);
   }
 
   if (user.status !== UserStatus.ACTIVE) {
-    throw new AppError('Email hali tasdiqlanmagan. Iltimos, emailingizni tasdiqlang', 403);
+    throw new AppError(
+      "Email hali tasdiqlanmagan. Iltimos, emailingizni tasdiqlang",
+      403,
+    );
   }
 
   const { accessToken, refreshToken } = generateTokenPair({
@@ -131,7 +153,7 @@ export async function login({ email, password }: LoginInput, meta: LoginMeta) {
 
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_TTL_DAYS);
-  
+
   await prisma.session.create({
     data: {
       userId: user.id,
@@ -153,11 +175,11 @@ export async function login({ email, password }: LoginInput, meta: LoginMeta) {
   };
 }
 
-export async function refreshAccessToken(refreshTokenFromCookie: string){
+export async function refreshAccessToken(refreshTokenFromCookie: string) {
   let payload;
-  try{
+  try {
     payload = verifyRefreshToken(refreshTokenFromCookie);
-  } catch{
+  } catch {
     throw new AppError("Refresh token yaroqsiz yoki muddati tugagan", 401);
   }
 
@@ -168,8 +190,8 @@ export async function refreshAccessToken(refreshTokenFromCookie: string){
     },
     select: {
       id: true,
-      refreshTokenHash: true
-    }
+      refreshTokenHash: true,
+    },
   });
 
   if (sessions.length === 0) {
@@ -178,8 +200,11 @@ export async function refreshAccessToken(refreshTokenFromCookie: string){
 
   let matchedSession: { id: string } | null = null;
 
-  for(const session of sessions){
-    const isMatch = await bcrypt.compare(refreshTokenFromCookie, session.refreshTokenHash);
+  for (const session of sessions) {
+    const isMatch = await bcrypt.compare(
+      refreshTokenFromCookie,
+      session.refreshTokenHash,
+    );
     if (isMatch) {
       matchedSession = { id: session.id };
       break;
@@ -187,7 +212,7 @@ export async function refreshAccessToken(refreshTokenFromCookie: string){
   }
 
   if (!matchedSession) {
-    throw new AppError('Refresh token yaroqsiz', 401);
+    throw new AppError("Refresh token yaroqsiz", 401);
   }
 
   const user = await prisma.user.findUnique({
@@ -195,8 +220,8 @@ export async function refreshAccessToken(refreshTokenFromCookie: string){
     select: { id: true, email: true, status: true },
   });
 
-  if (!user || user.status !== 'ACTIVE') {
-    throw new AppError('Foydalanuvchi topilmadi yoki faol emas', 401);
+  if (!user || user.status !== "ACTIVE") {
+    throw new AppError("Foydalanuvchi topilmadi yoki faol emas", 401);
   }
 
   const accessToken = generateAccessToken({
@@ -205,7 +230,6 @@ export async function refreshAccessToken(refreshTokenFromCookie: string){
   });
 
   return { accessToken };
-
 }
 
 export async function logout(refreshTokenFromCookie: string) {
@@ -222,10 +246,33 @@ export async function logout(refreshTokenFromCookie: string) {
   });
 
   for (const session of sessions) {
-    const isMatch = await bcrypt.compare(refreshTokenFromCookie, session.refreshTokenHash);
+    const isMatch = await bcrypt.compare(
+      refreshTokenFromCookie,
+      session.refreshTokenHash,
+    );
     if (isMatch) {
       await prisma.session.delete({ where: { id: session.id } });
       break;
     }
   }
+}
+
+export async function forgotPassword(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true },
+  });
+
+  if (!user) {
+    return;
+  }
+
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const redisKey = `password_reset:${resetToken}`;
+
+  await redis.set(redisKey, user.id, 'EX', PASSWORD_RESET_TTL_SECONDS);
+
+  const resetLink = `${process.env.WEB_APP_URL}/reset-password?token=${resetToken}`;
+
+  await queuePasswordResetEmail(user.email, resetLink);
 }

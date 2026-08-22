@@ -47,6 +47,10 @@ export const loginSchema = z.object({
   password: z.string().min(8, 'Parol kamida 8 belgidan iborat bo\'lishi kerak'),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
 export type VerifyEmailInput = z.infer<typeof VerifyEmailSchema>;
 
 export type RegisterInput = z.infer<typeof RegisterSchema>;
@@ -56,6 +60,8 @@ export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 
 // TODO: Login so'rov sxemasi shu yerga qo'shiladi
 // Masalan: export const LoginSchema = z.object({ ... });
