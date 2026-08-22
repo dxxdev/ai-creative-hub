@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import type { Request } from 'express';
 import { redis } from '../lib/redis.js';
@@ -12,7 +12,13 @@ const MAX_ATTEMPTS = 5;
 function loginRateLimitKey(req: Request): string {
   const email =
     typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : 'unknown';
-  return `${req.ip}:${email}`;
+  // MUHIM: req.ip'ni to'g'ridan-to'g'ri ishlatib bo'lmaydi — IPv6 manzillar
+  // (masalan localhost'dagi "::1") to'g'ri normalizatsiya qilinmasa, bitta
+  // foydalanuvchi turli IPv6 manzillar orqali cheklovni chetlab o'tishi mumkin.
+  // express-rate-limit shuni tekshirib, ipKeyGenerator() ishlatilmasa xato
+  // uloqtiradi (ERR_ERL_KEY_GEN_IPV6) — bu esa server ishga tushishida
+  // (rateLimit() chaqirilganda) butun process'ni yiqitadi.
+  return `${ipKeyGenerator(req.ip ?? '')}:${email}`;
 }
 
 export const loginRateLimiter = rateLimit({
