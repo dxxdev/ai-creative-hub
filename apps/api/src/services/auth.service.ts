@@ -9,7 +9,7 @@ import {
   generateTokenPair,
   verifyRefreshToken,
 } from "./token.service.js";
-import type { LoginInput } from "@repo/shared";
+import type { LoginInput, ResetPasswordInput } from "@repo/shared";
 import redis from "src/lib/redis.js";
 import { queuePasswordResetEmail } from "src/queues/email.queue.js";
 
@@ -275,4 +275,33 @@ export async function forgotPassword(email: string): Promise<void> {
   const resetLink = `${process.env.WEB_APP_URL}/reset-password?token=${resetToken}`;
 
   await queuePasswordResetEmail(user.email, resetLink);
+}
+
+export async function resetPassword({
+  token,
+  newPassword,
+}: ResetPasswordInput): Promise<void> {
+  const redisKey = `password_reset:${token}`;
+
+  const userId = await redis.get(redisKey);
+
+  if (!userId) {
+    throw new AppError('Yaroqsiz yoki muddati o\'tgan havola', 400);
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash },
+  });
+
+  // Xavfsizlik uchun: parol o'zgargandan keyin barcha qurilmalardagi
+  // sessiyalar bekor qilinadi — kimdir eski parol bilan sessiya ochib
+  // qolgan bo'lsa ham, endi ishlamaydi
+  await prisma.session.deleteMany({ where: { userId } });
+
+  // Token bir martalik bo'lishi kerak — muvaffaqiyatli ishlatilgandan
+  // keyin Redis'dan o'chiriladi
+  await redis.del(redisKey);
 }
