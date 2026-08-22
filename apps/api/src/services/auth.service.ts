@@ -10,8 +10,8 @@ import {
   verifyRefreshToken,
 } from "./token.service.js";
 import type { LoginInput, ResetPasswordInput } from "@repo/shared";
-import redis from "src/lib/redis.js";
-import { queuePasswordResetEmail } from "src/queues/email.queue.js";
+import redis from "../lib/redis.js";
+import { queuePasswordResetEmail } from "../queues/email.queue.js";
 
 const SALT_ROUNDS = 12;
 const REFRESH_TOKEN_TTL_DAYS = 30;

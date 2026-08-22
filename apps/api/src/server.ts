@@ -24,3 +24,5 @@ app.listen(env.PORT, () => {
     `✅ API server ishga tushdi (${env.NODE_ENV}): http://localhost:${env.PORT}`
   );
 });
+
+export default app;
