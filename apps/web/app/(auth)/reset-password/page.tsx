@@ -5,14 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import type { ResetPasswordInput } from "@repo/shared";
 import { apiClient, ApiError, ApiNetworkError } from "@/lib/api-client";
+import { FormBanner } from "@/components/form-banner";
 
-/**
- * Backend `resetPasswordSchema` faqat { token, newPassword }ni talab qiladi —
- * "parolni takrorlash" maydoni backend kontraktida yo'q, bu sof klient
- * tomondagi UX qulayligi. Shuning uchun bu yerda `@repo/shared`dagi zod
- * sxemasidan emas, react-hook-form'ning o'z `validate` qoidalaridan
- * foydalanamiz — apps/web'ga alohida `zod` bog'liqligini qo'shmasdan.
- */
 interface ResetPasswordFormValues {
   newPassword: string;
   confirmPassword: string;
@@ -29,6 +23,7 @@ function ResetPasswordForm() {
     register,
     handleSubmit,
     watch,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<ResetPasswordFormValues>({
     defaultValues: {
@@ -56,7 +51,11 @@ function ResetPasswordForm() {
       router.push("/login?reset=1");
     } catch (err) {
       if (err instanceof ApiError) {
-        // Masalan 400 — "Yaroqsiz yoki muddati o'tgan havola"
+        if (err.fieldErrors?.newPassword?.[0]) {
+          setError("newPassword", { message: err.fieldErrors.newPassword[0] });
+          return;
+        }
+
         setFormError(err.message);
         return;
       }
@@ -80,8 +79,9 @@ function ResetPasswordForm() {
             so'rang.
           </p>
           
-          <a href="/forgot-password"
-            className="inline-block rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700" >
+          <a  href="/forgot-password"
+            className="inline-block rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700"
+          >
             Parolni tiklashni so'rash
           </a>
         </div>
@@ -152,11 +152,7 @@ function ResetPasswordForm() {
             )}
           </div>
 
-          {formError && (
-            <p role="alert" className="text-sm text-red-600">
-              {formError}
-            </p>
-          )}
+          {formError && <FormBanner variant="error">{formError}</FormBanner>}
 
           <button
             type="submit"

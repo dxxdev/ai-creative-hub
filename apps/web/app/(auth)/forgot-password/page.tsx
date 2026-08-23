@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { forgotPasswordSchema, type ForgotPasswordInput } from "@repo/shared";
 import { apiClient, ApiError, ApiNetworkError } from "@/lib/api-client";
+import { FormBanner } from "@/components/form-banner";
 
 interface ForgotPasswordResponse {
   success: boolean;
@@ -36,9 +37,6 @@ export default function ForgotPasswordPage() {
         { body: input },
       );
 
-      // Backend email mavjud yoki yo'qligidan qat'iy nazar bir xil javob
-      // qaytaradi (enumeration hujumidan himoya) — shuning uchun bu yerda
-      // ham hech qanday shart tekshirmasdan, xuddi shu xabarni ko'rsatamiz.
       setSuccessMessage(result.message ?? "Agar bu email mavjud bo'lsa, xat yuborildi");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -66,8 +64,9 @@ export default function ForgotPasswordPage() {
           <h1 className="mb-2 text-2xl font-bold tracking-tight">Xatni tekshiring</h1>
           <p className="mb-6 text-sm text-gray-600">{successMessage}</p>
           
-          <a href="/login"
-            className="inline-block rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700" >
+          <a  href="/login"
+            className="inline-block rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700"
+          >
             Kirish sahifasiga qaytish
           </a>
         </div>
@@ -101,11 +100,7 @@ export default function ForgotPasswordPage() {
             )}
           </div>
 
-          {formError && (
-            <p role="alert" className="text-sm text-red-600">
-              {formError}
-            </p>
-          )}
+          {formError && <FormBanner variant="error">{formError}</FormBanner>}
 
           <button
             type="submit"
@@ -118,8 +113,9 @@ export default function ForgotPasswordPage() {
 
         <p className="mt-4 text-center text-sm text-gray-600">
           
-          <a href="/login"
-            className="font-medium text-gray-900 underline underline-offset-2 hover:text-gray-700" >
+          <a  href="/login"
+            className="font-medium text-gray-900 underline underline-offset-2 hover:text-gray-700"
+          >
             Kirish sahifasiga qaytish
           </a>
         </p>

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VerifyEmailSchema } from "@repo/shared";
 import { apiClient, ApiError, ApiNetworkError } from "@/lib/api-client";
+import { FormBanner } from "@/components/form-banner";
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -23,7 +24,6 @@ function VerifyEmailForm() {
 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
-  // Har soniyada cooldown'ni 1 taga kamaytiradi, 0'ga yetganda to'xtaydi
   useEffect(() => {
     if (cooldown <= 0) return;
     const timer = setTimeout(() => setCooldown((prev) => prev - 1), 1000);
@@ -35,7 +35,6 @@ function VerifyEmailForm() {
   }
 
   function handleDigitChange(index: number, rawValue: string) {
-    // Faqat oxirgi kiritilgan raqamni olamiz (masalan tez yozganda ikkitasi kelib qolsa)
     const value = rawValue.replace(/\D/g, "").slice(-1);
 
     setDigits((prev) => {
@@ -51,7 +50,6 @@ function VerifyEmailForm() {
 
   function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Backspace" && !digits[index] && index > 0) {
-      // Joriy katak bo'sh bo'lsa, Backspace oldingi katakka o'tib, uni ham tozalaydi
       setDigits((prev) => {
         const next = [...prev];
         next[index - 1] = "";
@@ -136,8 +134,6 @@ function VerifyEmailForm() {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 429) {
-          // Backend javobi: "Iltimos, qayta urinishdan oldin N soniya kuting"
-          // — server bilan sinxron bo'lishi uchun countdown'ni shu qiymatdan boshlaymiz
           const match = err.message.match(/(\d+)\s*soniya/);
           setCooldown(match ? Number(match[1]) : RESEND_COOLDOWN_SECONDS);
         }
@@ -161,8 +157,9 @@ function VerifyEmailForm() {
             Tasdiqlash sahifasini to'g'ri ochish uchun avval ro'yxatdan o'ting.
           </p>
           
-           <a href="/register"
-            className="inline-block rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700">
+          <a  href="/register"
+            className="inline-block rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700"
+          >
             Ro'yxatdan o'tish
           </a>
         </div>
@@ -204,13 +201,15 @@ function VerifyEmailForm() {
           </div>
 
           {otpError && (
-            <p role="alert" className="mb-4 text-sm text-red-600">
+            <FormBanner variant="error" className="mb-4">
               {otpError}
-            </p>
+            </FormBanner>
           )}
 
           {resendMessage && !otpError && (
-            <p className="mb-4 text-sm text-green-600">{resendMessage}</p>
+            <FormBanner variant="success" className="mb-4">
+              {resendMessage}
+            </FormBanner>
           )}
 
           <button
