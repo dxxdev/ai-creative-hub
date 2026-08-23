@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { VerifyEmailSchema } from "@repo/shared";
 import { apiClient, ApiError, ApiNetworkError } from "@/lib/api-client";
 import { FormBanner } from "@/components/form-banner";
+import { Spinner } from "@/components/spinner";
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -213,12 +214,13 @@ function VerifyEmailForm() {
           )}
 
           <button
-            type="submit"
-            disabled={!isCodeComplete || isSubmitting}
-            className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSubmitting ? "Tekshirilmoqda..." : "Tasdiqlash"}
-          </button>
+  type="submit"
+  disabled={isCodeComplete || isSubmitting}
+  className="flex w-full items-center justify-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+>
+  {isSubmitting && <Spinner />}
+  {isSubmitting ? "Tekshirilmoqda..." : "Tasdiqlash"}
+</button>
         </form>
 
         <div className="mt-4 text-center text-sm text-gray-600">
@@ -226,13 +228,14 @@ function VerifyEmailForm() {
             <span>Qayta yuborish {cooldown} soniyadan keyin mavjud bo'ladi</span>
           ) : (
             <button
-              type="button"
-              onClick={handleResend}
-              disabled={isResending}
-              className="font-medium text-gray-900 underline underline-offset-2 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isResending ? "Yuborilmoqda..." : "Kodni qayta yuborish"}
-            </button>
+  type="button"
+  onClick={handleResend}
+  disabled={isSubmitting}
+  className="flex w-full items-center justify-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+>
+  {isSubmitting && <Spinner />}
+  {isSubmitting ? "Yuborilmoqda" : "Kodni qayta yuborish"}
+</button>
           )}
         </div>
       </div>

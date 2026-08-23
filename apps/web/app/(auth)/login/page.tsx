@@ -8,6 +8,7 @@ import { loginSchema, type LoginInput } from "@repo/shared";
 import { apiClient, ApiError, ApiNetworkError } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
 import { FormBanner } from "@/components/form-banner";
+import { Spinner } from "@/components/spinner";
 
 interface LoginResponse {
   success: boolean;
@@ -79,7 +80,9 @@ function LoginForm() {
         return;
       }
 
-      setFormError("Kutilmagan xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.");
+      setFormError(
+        "Kutilmagan xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.",
+      );
     }
   }
 
@@ -103,9 +106,16 @@ function LoginForm() {
           </FormBanner>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          noValidate
+          className="space-y-4"
+        >
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="email"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
               Email
             </label>
             <input
@@ -116,17 +126,23 @@ function LoginForm() {
               {...register("email")}
             />
             {errors.email && (
-              <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+              <p className="mt-1 text-sm text-red-600">
+                {errors.email.message}
+              </p>
             )}
           </div>
 
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700"
+              >
                 Parol
               </label>
-              
-              <a  href="/forgot-password"
+
+              <a
+                href="/forgot-password"
                 className="text-sm font-medium text-gray-600 underline underline-offset-2 hover:text-gray-900"
               >
                 Parolni unutdingizmi?
@@ -140,7 +156,9 @@ function LoginForm() {
               {...register("password")}
             />
             {errors.password && (
-              <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+              <p className="mt-1 text-sm text-red-600">
+                {errors.password.message}
+              </p>
             )}
           </div>
 
@@ -149,16 +167,17 @@ function LoginForm() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
+            {isSubmitting && <Spinner />}
             {isSubmitting ? "Kirilmoqda..." : "Kirish"}
           </button>
         </form>
 
         <p className="mt-4 text-center text-sm text-gray-600">
           Hisobingiz yo'qmi?{" "}
-          
-          <a  href="/register"
+          <a
+            href="/register"
             className="font-medium text-gray-900 underline underline-offset-2 hover:text-gray-700"
           >
             Ro'yxatdan o'ting

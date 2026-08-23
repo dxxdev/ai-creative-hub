@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import type { ResetPasswordInput } from "@repo/shared";
 import { apiClient, ApiError, ApiNetworkError } from "@/lib/api-client";
 import { FormBanner } from "@/components/form-banner";
+import { Spinner } from "@/components/spinner";
 
 interface ResetPasswordFormValues {
   newPassword: string;
@@ -155,12 +156,13 @@ function ResetPasswordForm() {
           {formError && <FormBanner variant="error">{formError}</FormBanner>}
 
           <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSubmitting ? "Saqlanmoqda..." : "Parolni yangilash"}
-          </button>
+  type="submit"
+  disabled={isSubmitting}
+  className="flex w-full items-center justify-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+>
+  {isSubmitting && <Spinner />}
+  {isSubmitting ? "Saqlanmoqda..." : "Parolni yangilash"}
+</button>
         </form>
       </div>
     </main>
