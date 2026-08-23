@@ -28,6 +28,7 @@ function LoginForm() {
 
   const justVerified = searchParams.get("verified") === "1";
   const [formError, setFormError] = useState<string | null>(null);
+  const justReset = searchParams.get("reset") === "1";
 
   const {
     register,
@@ -79,7 +80,9 @@ function LoginForm() {
         return;
       }
 
-      setFormError("Kutilmagan xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.");
+      setFormError(
+        "Kutilmagan xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.",
+      );
     }
   }
 
@@ -97,9 +100,22 @@ function LoginForm() {
           </p>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+        {justReset && (
+          <p className="mb-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+            Parolingiz muvaffaqiyatli yangilandi. Endi yangi parol bilan kiring.
+          </p>
+        )}
+
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          noValidate
+          className="space-y-4"
+        >
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="email"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
               Email
             </label>
             <input
@@ -110,18 +126,25 @@ function LoginForm() {
               {...register("email")}
             />
             {errors.email && (
-              <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+              <p className="mt-1 text-sm text-red-600">
+                {errors.email.message}
+              </p>
             )}
           </div>
 
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700"
+              >
                 Parol
               </label>
-              
-              <a href="/forgot-password"
-                className="text-sm font-medium text-gray-600 underline underline-offset-2 hover:text-gray-900" >
+
+              <a
+                href="/forgot-password"
+                className="text-sm font-medium text-gray-600 underline underline-offset-2 hover:text-gray-900"
+              >
                 Parolni unutdingizmi?
               </a>
             </div>
@@ -133,7 +156,9 @@ function LoginForm() {
               {...register("password")}
             />
             {errors.password && (
-              <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+              <p className="mt-1 text-sm text-red-600">
+                {errors.password.message}
+              </p>
             )}
           </div>
 
@@ -154,9 +179,10 @@ function LoginForm() {
 
         <p className="mt-4 text-center text-sm text-gray-600">
           Hisobingiz yo'qmi?{" "}
-          
-          <a href="/register"
-            className="font-medium text-gray-900 underline underline-offset-2 hover:text-gray-700" >
+          <a
+            href="/register"
+            className="font-medium text-gray-900 underline underline-offset-2 hover:text-gray-700"
+          >
             Ro'yxatdan o'ting
           </a>
         </p>

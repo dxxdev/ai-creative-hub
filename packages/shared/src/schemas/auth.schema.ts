@@ -53,7 +53,7 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z.object({
   token: z.string().min(1, "Token talab qilinadi"),
-  newPassword: z.string().min(0, "Parol kamida 8 belgidan iborat bo'lishi kerak")
+  newPassword: z.string().min(8, "Parol kamida 8 belgidan iborat bo'lishi kerak")
 })
 
 export type VerifyEmailInput = z.infer<typeof VerifyEmailSchema>;
