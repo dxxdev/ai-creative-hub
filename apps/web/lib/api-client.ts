@@ -11,6 +11,48 @@
  *   `{ error, errors?, details? }` shakliga mos.
  */
 
+import { useAuthStore } from "@/store/auth.store";
+
+
+const AUTH_ENDPOINTS_EXEMPT_FROM_REFRESH = new Set([
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/refresh",
+  "/api/auth/logout",
+]);
+
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${getApiBaseUrl()}/api/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+
+        if (!response.ok) return null;
+
+        const data = await response.json().catch(() => null);
+        const newAccessToken: string | undefined = data?.data?.accessToken;
+
+        if (!newAccessToken) return null;
+
+        useAuthStore.getState().setAccessToken(newAccessToken);
+        return newAccessToken;
+      } catch {
+        return null;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+
+  return refreshPromise;
+}
+
 function getApiBaseUrl(): string {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -125,8 +167,10 @@ async function request<TResponse = unknown>(
   path: string,
   method: string,
   options: ApiRequestOptions = {},
+  isRetryAfterRefresh = false,
 ): Promise<TResponse>  {
   const { body, params, headers, ...rest } = options;
+  const accessToken = useAuthStore.getState().accessToken;
 
   const isJsonBody =
     body !== undefined && !(body instanceof FormData) && !(body instanceof Blob);
@@ -148,12 +192,27 @@ async function request<TResponse = unknown>(
       headers: {
         ...(isJsonBody ? { "Content-Type": "application/json" } : {}),
         Accept: "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...headers,
       },
       body: isJsonBody ? JSON.stringify(body) : (body as BodyInit | undefined),
     });
   } catch (cause) {
     throw new ApiNetworkError(cause);
+  }
+
+  if (
+    response.status === 401 &&
+    !isRetryAfterRefresh &&
+    !AUTH_ENDPOINTS_EXEMPT_FROM_REFRESH.has(path)
+  ) {
+    const newAccessToken = await refreshAccessToken();
+
+    if (newAccessToken) {
+      return request<TResponse>(path, method, options, true);
+    }
+
+    useAuthStore.getState().clearSession();
   }
 
   const data = await parseResponseBody(response);
