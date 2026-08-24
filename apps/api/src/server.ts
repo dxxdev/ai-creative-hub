@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import routes from "./routes/index.js";
+import postsRouter from "./routes/posts.routes.js";
 import { notFoundHandler } from "./middlewares/notFound.middleware.js";
 import { errorHandler } from "./middlewares/errorHandler.middleware.js";
 import { env } from "./config/env.js";
@@ -18,6 +19,7 @@ app.use(cors({
 app.use(express.json());
 
 app.use(routes);
+app.use('/posts', postsRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
