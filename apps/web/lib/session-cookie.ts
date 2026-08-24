@@ -1,0 +1,1 @@
+export const SESSION_FLAG_COOKIE_NAME = "has_session";
