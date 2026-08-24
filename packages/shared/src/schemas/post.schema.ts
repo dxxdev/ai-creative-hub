@@ -52,10 +52,52 @@ export const CreateCodePostSchema = z.object({
   codeLanguage: z.string().min(1).max(50),
 });
 
-export const CreatePostSchema = z.discriminatedUnion("contentType", [
-  CreateImagePostSchema,
-  CreateCodePostSchema,
-]);
+export const CreatePostSchema = z
+  .object({
+    title: z
+      .string()
+      .min(3, "Sarlavha kamida 3 belgi bo'lishi kerak")
+      .max(100, "Sarlavha 100 belgidan oshmasligi kerak"),
+    description: z
+      .string()
+      .max(500, "Tavsif 500 belgidan oshmasligi kerak")
+      .optional(),
+    contentType: z.enum(["IMAGE", "CODE"]),
+    visibility: z
+      .enum(["PUBLIC", "UNLISTED", "PRIVATE"])
+      .optional()
+      .default("PUBLIC"),
+    tags: z
+      .array(z.string().max(30, "Har bir tag 30 belgidan oshmasligi kerak"))
+      .max(10, "Ko'pi bilan 10 ta tag qo'shish mumkin")
+      .optional(),
+    isNsfw: z.boolean().optional().default(false),
+
+    // IMAGE uchun — R2'ga presigned URL orqali yuklangan faylning kaliti
+    fileKey: z.string().optional(),
+
+    // CODE uchun
+    codeContent: z.string().optional(),
+    codeLanguage: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.contentType === "CODE" && !data.codeContent) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "CODE turidagi post uchun codeContent majburiy",
+        path: ["codeContent"],
+      });
+    }
+
+    if (data.contentType === "IMAGE" && !data.fileKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "IMAGE turidagi post uchun fileKey majburiy",
+        path: ["fileKey"],
+      });
+    }
+  });
+
 export type CreatePostInput = z.infer<typeof CreatePostSchema>;
 
 // ---------------------------------------------------------------------------
