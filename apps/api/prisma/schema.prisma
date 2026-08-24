@@ -7,6 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ContentType {
+  IMAGE
+  VIDEO
+  AUDIO
+  CODE
+  MODEL_3D
+}
+
+enum PostVisibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+enum PostStatus {
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
 enum UserStatus {
   PENDING_VERIFICATION
   ACTIVE
@@ -22,9 +42,72 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  posts        Post[]
   sessions     Session[]
 
   @@map("users")
+}
+
+model Post {
+  id String @id @default(uuid())
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+
+  contentType ContentType
+  visibility  PostVisibility @default(PUBLIC)
+  status      PostStatus     @default(PUBLISHED)
+
+  // IMAGE / VIDEO / AUDIO / MODEL_3D uchun
+  mediaUrl     String?
+  thumbnailUrl String?
+  width        Int?
+  height       Int?
+
+  // CODE uchun
+  codeContent  String? @db.Text
+  codeLanguage String?
+
+  viewCount  Int @default(0)
+  likeCount  Int @default(0)
+  remixCount Int @default(0)
+
+  isNsfw Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tags PostTag[]
+
+  @@index([authorId])
+  @@index([contentType])
+  @@index([visibility, status])
+  @@index([createdAt])
+  @@map("posts")
+}
+
+model Tag {
+  id   String @id @default(uuid())
+  name String @unique
+
+  posts PostTag[]
+
+  @@map("tags")
+}
+
+model PostTag {
+  postId String
+  tagId  String
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId])
+  @@map("post_tags")
 }
 
 model Session {
