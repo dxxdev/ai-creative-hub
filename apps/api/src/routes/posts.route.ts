@@ -1,17 +1,25 @@
 import { Router } from "express";
-import * as postsController from "../controllers/posts.controller.js";
-import { requireAuth } from "../middlewares/require-auth.js";
-import { optionalAuth } from "../middlewares/optional-auth.js";
+import { CreatePostSchema, UpdatePostSchema } from "@repo/shared";
+import { validateSchema } from "../middlewares/validateSchema.js";
+import { authGuard } from "../middlewares/authGuard.js";
+import { optionalAuthGuard } from "../middlewares/optionalAuthGuard.js";
+import {
+  createPost,
+  getPost,
+  listPosts,
+  updatePost,
+  deletePost,
+} from "../controllers/posts.controller.js";
 
 const router = Router();
 
-// Public/optional-auth endpointlar (PRIVATE post tekshiruvi uchun optionalAuth kerak)
-router.get("/", optionalAuth, postsController.listPosts);
-router.get("/:id", optionalAuth, postsController.getPost);
+// Public/optional-auth endpointlar (PRIVATE post tekshiruvi uchun optionalAuthGuard kerak)
+router.get("/", optionalAuthGuard, listPosts);
+router.get("/:id", optionalAuthGuard, getPost);
 
 // Auth talab qilinadigan endpointlar
-router.post("/", requireAuth, postsController.createPost);
-router.patch("/:id", requireAuth, postsController.updatePost);
-router.delete("/:id", requireAuth, postsController.deletePost);
+router.post("/", authGuard, validateSchema(CreatePostSchema), createPost);
+router.patch("/:id", authGuard, validateSchema(UpdatePostSchema), updatePost);
+router.delete("/:id", authGuard, deletePost);
 
 export default router;

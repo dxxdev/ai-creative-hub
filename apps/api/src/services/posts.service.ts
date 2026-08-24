@@ -1,7 +1,19 @@
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { CreatePostInput, ListPostsQuery, UpdatePostInput } from "@repo/shared";
+import { prisma } from "../lib/prisma.js";
+import { AppError } from "../utils/AppError.js";
 
-const prisma = new PrismaClient();
+export class PostNotFoundError extends AppError {
+  constructor() {
+    super("Post topilmadi", 404);
+  }
+}
+
+export class PostForbiddenError extends AppError {
+  constructor() {
+    super("Bu postni o'zgartirish huquqingiz yo'q", 403);
+  }
+}
 
 // Post bilan birga tag nomlarini ham qaytaradigan umumiy `select`
 const postWithTagsSelect = {
@@ -103,8 +115,8 @@ export async function listPosts(query: ListPostsQuery) {
 
 export async function updatePost(id: string, authorId: string, input: UpdatePostInput) {
   const existing = await prisma.post.findUnique({ where: { id }, select: { authorId: true } });
-  if (!existing) return { error: "NOT_FOUND" as const };
-  if (existing.authorId !== authorId) return { error: "FORBIDDEN" as const };
+  if (!existing) throw new PostNotFoundError();
+  if (existing.authorId !== authorId) throw new PostForbiddenError();
 
   const { tags, ...data } = input;
 
@@ -126,14 +138,13 @@ export async function updatePost(id: string, authorId: string, input: UpdatePost
     select: postWithTagsSelect,
   });
 
-  return { data: mapPost(post) };
+  return mapPost(post);
 }
 
 export async function deletePost(id: string, authorId: string) {
   const existing = await prisma.post.findUnique({ where: { id }, select: { authorId: true } });
-  if (!existing) return { error: "NOT_FOUND" as const };
-  if (existing.authorId !== authorId) return { error: "FORBIDDEN" as const };
+  if (!existing) throw new PostNotFoundError();
+  if (existing.authorId !== authorId) throw new PostForbiddenError();
 
   await prisma.post.delete({ where: { id } });
-  return { error: null };
 }
