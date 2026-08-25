@@ -61,15 +61,16 @@ model Post {
   visibility  PostVisibility @default(PUBLIC)
   status      PostStatus     @default(PUBLISHED)
 
-  // IMAGE / VIDEO / AUDIO / MODEL_3D uchun
-  mediaUrl     String?
-  thumbnailUrl String?
-  width        Int?
-  height       Int?
+  // IMAGE / VIDEO / AUDIO / MODEL_3D uchun (diskdagi nisbiy fayl yo'li, masalan storage/uploads/... ostida)
+  mediaPath     String?
+  thumbnailPath String?
+  width         Int?
+  height        Int?
 
   // CODE uchun
-  codeContent  String? @db.Text
-  codeLanguage String?
+  codeContent       String? @db.Text
+  codeLanguage      String?
+  codeHighlightHtml String? @db.Text // tayyor syntax-highlight HTML keshi
 
   viewCount  Int @default(0)
   likeCount  Int @default(0)

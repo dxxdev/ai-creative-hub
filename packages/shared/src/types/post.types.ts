@@ -17,7 +17,7 @@ export interface PostAuthor {
 export interface PostSummary {
   id: string;
   title: string;
-  thumbnailUrl: string | null;
+  thumbnailPath: string | null;
   contentType: ContentType;
   author: PostAuthor;
   likeCount: number;
@@ -32,7 +32,7 @@ export interface PostSummary {
 
 export interface PostDetail extends PostSummary {
   description: string | null;
-  mediaUrl: string | null;
+  mediaPath: string | null;
   codeContent: string | null;
   codeLanguage: string | null;
   width: number | null;

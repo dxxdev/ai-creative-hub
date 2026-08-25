@@ -25,7 +25,7 @@ export type PostStatus = z.infer<typeof PostStatusSchema>;
 
 // ---------------------------------------------------------------------------
 // CREATE POST — contentType bo'yicha discriminated union
-// IMAGE uchun mediaUrl majburiy, CODE uchun codeContent majburiy
+// IMAGE uchun mediaPath majburiy, CODE uchun codeContent majburiy
 // ---------------------------------------------------------------------------
 
 const basePostFields = {
@@ -39,8 +39,8 @@ const basePostFields = {
 export const CreateImagePostSchema = z.object({
   ...basePostFields,
   contentType: z.literal("IMAGE"),
-  mediaUrl: z.string().url("mediaUrl noto'g'ri URL"),
-  thumbnailUrl: z.string().url().optional(),
+  mediaPath: z.string().min(1, "mediaPath majburiy"),
+  thumbnailPath: z.string().min(1).optional(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
 });
@@ -138,8 +138,8 @@ export const PostResponseSchema = z.object({
   contentType: ContentTypeSchema,
   visibility: PostVisibilitySchema,
   status: PostStatusSchema,
-  mediaUrl: z.string().nullable(),
-  thumbnailUrl: z.string().nullable(),
+  mediaPath: z.string().nullable(),
+  thumbnailPath: z.string().nullable(),
   width: z.number().nullable(),
   height: z.number().nullable(),
   codeContent: z.string().nullable(),
