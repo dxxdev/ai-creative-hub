@@ -73,8 +73,8 @@ export const CreatePostSchema = z
       .optional(),
     isNsfw: z.boolean().optional().default(false),
 
-    // IMAGE uchun — R2'ga presigned URL orqali yuklangan faylning kaliti
-    fileKey: z.string().optional(),
+    // IMAGE uchun — 2-kunda yozilgan yuklash endpointidan qaytgan vaqtinchalik fayl identifikatori
+    fileId: z.string().optional(),
 
     // CODE uchun
     codeContent: z.string().optional(),
@@ -89,11 +89,11 @@ export const CreatePostSchema = z
       });
     }
 
-    if (data.contentType === "IMAGE" && !data.fileKey) {
+    if (data.contentType === "IMAGE" && !data.fileId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "IMAGE turidagi post uchun fileKey majburiy",
-        path: ["fileKey"],
+        message: "IMAGE turidagi post uchun fileId majburiy",
+        path: ["fileId"],
       });
     }
   });
