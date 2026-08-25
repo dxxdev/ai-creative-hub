@@ -12,6 +12,7 @@ export async function createPost(req: Request, res: Response, next: NextFunction
     return res.status(201).json({ success: true, data: post });
   } catch (error) {
     next(error);
+    return;
   }
 }
 
@@ -35,6 +36,7 @@ export async function getPost(req: Request, res: Response, next: NextFunction) {
     return res.status(200).json({ success: true, data: post });
   } catch (error) {
     next(error);
+    return;
   }
 }
 
@@ -60,6 +62,7 @@ export async function listPosts(req: Request, res: Response, next: NextFunction)
     });
   } catch (error) {
     next(error);
+    return;
   }
 }
 
@@ -73,6 +76,7 @@ export async function updatePost(req: Request, res: Response, next: NextFunction
     return res.status(200).json({ success: true, data: post });
   } catch (error) {
     next(error);
+    return;
   }
 }
 
@@ -86,5 +90,6 @@ export async function deletePost(req: Request, res: Response, next: NextFunction
     return res.status(204).send();
   } catch (error) {
     next(error);
+    return;
   }
 }
