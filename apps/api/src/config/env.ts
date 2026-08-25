@@ -43,9 +43,15 @@ const envSchema = z.object({
     .string({ required_error: "SMTP_USER .env faylida ko'rsatilishi shart" })
     .min(1, "SMTP_USER bo'sh bo'lmasligi kerak"),
 
-  SMTP_PASS: z
+    SMTP_PASS: z
     .string({ required_error: "SMTP_PASS .env faylida ko'rsatilishi shart" })
     .min(1, "SMTP_PASS bo'sh bo'lmasligi kerak"),
+
+  // Lokal disk saqlash (bulut xizmati ishlatilmaydi):
+  // yuklangan fayllar UPLOAD_DIR papkasida saqlanadi va
+  // PUBLIC_UPLOAD_BASE_URL yo'li orqali statik xizmat qilinadi.
+  UPLOAD_DIR: z.string().min(1).default("./storage/uploads"),
+  PUBLIC_UPLOAD_BASE_URL: z.string().min(1).default("/uploads"),
 });
 
 export type Env = z.infer<typeof envSchema>;

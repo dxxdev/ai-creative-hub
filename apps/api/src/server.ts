@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import path from "node:path";
 import routes from "./routes/index.js";
 import postsRouter from "./routes/posts.routes.js";
 import { notFoundHandler } from "./middlewares/notFound.middleware.js";
@@ -17,6 +18,14 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+
+// Lokal disk saqlash: yuklangan fayllar (UPLOAD_DIR) shu yerdan
+// PUBLIC_UPLOAD_BASE_URL (masalan /uploads) yo'li orqali statik
+// xizmat qilinadi — bulut saqlash xizmati ishlatilmaydi.
+app.use(
+  env.PUBLIC_UPLOAD_BASE_URL,
+  express.static(path.resolve(process.cwd(), env.UPLOAD_DIR))
+);
 
 app.use(routes);
 app.use('/posts', postsRouter);
