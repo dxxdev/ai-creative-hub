@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { CreatePostInput, ListPostsQuery, UpdatePostInput } from "@repo/shared";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/AppError.js";
+import { enqueueImageProcessingJob } from "src/queues/image-processing.queue.js";
 
 export class PostNotFoundError extends AppError {
   constructor() {
@@ -44,26 +45,67 @@ function mapPost<T extends { tags: { tag: { name: string } }[] }>(post: T) {
   return { ...rest, tags: tags.map((t) => t.tag.name) };
 }
 
-export async function createPost(authorId: string, input: CreatePostInput) {
-  const { tags, ...data } = input;
+export async function createPost(userId: string, dto: CreatePostInput) {
+  const { tags, fileId, codeContent, codeLanguage, ...baseFields } = dto;
+  // baseFields = { title, description, contentType, visibility, isNsfw } —
+  // bularning barchasi Post modelidagi ustunlar bilan bevosita mos keladi.
 
+  const tagsCreateInput = tags?.length
+    ? {
+        create: tags.map((name) => ({
+          tag: {
+            connectOrCreate: {
+              where: { name },
+              create: { name },
+            },
+          },
+        })),
+      }
+    : undefined;
+
+  if (dto.contentType === "IMAGE") {
+    if (!fileId) {
+      // CreatePostSchema.superRefine bu holatni allaqachon rad etadi,
+      // lekin ikkinchi qatlam himoya sifatida bu yerda ham tekshiramiz.
+      throw new AppError("IMAGE turidagi post uchun fileId majburiy", 400);
+    }
+
+    // fileId — POST /media/upload'dan (2-kun) qaytgan qiymatning aynan
+    // o'zi: diskdagi nisbiy fayl yo'li (local-storage.service.ts'dagi
+    // toRelativeStoragePath natijasi, masalan "{userId}/{uuid}.jpg").
+    // V1'da qo'shimcha ko'chirish/tasdiqlash qadami yo'q — shu nisbiy
+    // yo'l to'g'ridan-to'g'ri Post.mediaPath sifatida saqlanadi.
+    const mediaPath = fileId;
+
+    const post = await prisma.post.create({
+      data: {
+        ...baseFields,
+        authorId: userId,
+        mediaPath,
+        // Thumbnail hali tayyor emas — worker (4-kun) uni generatsiya
+        // qilib, statusni PUBLISHED'ga o'tkazgunga qadar PROCESSING'da qoladi.
+        status: "PROCESSING",
+        tags: tagsCreateInput,
+      },
+      select: postWithTagsSelect,
+    });
+
+    enqueueImageProcessingJob({ postId: post.id, mediaPath });
+
+    return mapPost(post);
+  }
+
+  // CODE (va V1 doirasidan tashqari boshqa content turlari uchun
+  // kelajakdagi kengaytmalar) — fon ishlovi shart emas, shuning uchun
+  // sinxron ravishda to'g'ridan-to'g'ri PUBLISHED holatida yaratiladi.
   const post = await prisma.post.create({
     data: {
-      ...data,
-      authorId,
-      status: "PUBLISHED", // V1: sinxron yuklash, keyinchalik BullMQ orqali PROCESSING bo'lishi mumkin
-      tags: tags?.length
-        ? {
-            create: tags.map((name) => ({
-              tag: {
-                connectOrCreate: {
-                  where: { name },
-                  create: { name },
-                },
-              },
-            })),
-          }
-        : undefined,
+      ...baseFields,
+      authorId: userId,
+      codeContent,
+      codeLanguage,
+      status: "PUBLISHED",
+      tags: tagsCreateInput,
     },
     select: postWithTagsSelect,
   });
