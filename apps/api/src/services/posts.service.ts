@@ -3,6 +3,7 @@ import type { CreatePostInput, ListPostsQuery, UpdatePostInput } from "@repo/sha
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/AppError.js";
 import { enqueueImageProcessingJob } from "src/queues/image-processing.queue.js";
+import { detectCodeLanguage } from "./code-language-detection.service.js";
 
 export class PostNotFoundError extends AppError {
   constructor() {
@@ -98,12 +99,26 @@ export async function createPost(userId: string, dto: CreatePostInput) {
   // CODE (va V1 doirasidan tashqari boshqa content turlari uchun
   // kelajakdagi kengaytmalar) — fon ishlovi shart emas, shuning uchun
   // sinxron ravishda to'g'ridan-to'g'ri PUBLISHED holatida yaratiladi.
+  if (!codeContent) {
+    // CreatePostSchema.superRefine bu holatni allaqachon rad etadi,
+    // lekin ikkinchi qatlam himoya sifatida bu yerda ham tekshiramiz.
+    throw new AppError("CODE turidagi post uchun codeContent majburiy", 400);
+  }
+
+  // Til aniqlash (5-kun): hozircha stub — foydalanuvchi ko'rsatgan
+  // codeLanguage ustunlik qiladi, aniqlash natijasi faqat u
+  // ko'rsatilmagan holatda zaxira (fallback) sifatida ishlatiladi.
+  const detectedLanguage = await detectCodeLanguage(codeContent);
+  const resolvedLanguage = codeLanguage ?? detectedLanguage ?? undefined;
+
   const post = await prisma.post.create({
     data: {
       ...baseFields,
       authorId: userId,
       codeContent,
-      codeLanguage,
+      codeLanguage: resolvedLanguage,
+      // mediaPath ataylab qo'yilmaydi — Prisma uni null qoldiradi,
+      // chunki CODE post'da diskdagi media fayl mavjud emas.
       status: "PUBLISHED",
       tags: tagsCreateInput,
     },
