@@ -4,7 +4,7 @@ import { validateSchema } from "../middlewares/validateSchema.js";
 import { authGuard } from "../middlewares/authGuard.js";
 import { optionalAuthGuard } from "../middlewares/optionalAuthGuard.js";
 import {
-  createPost,
+  createPostHandler,
   getPost,
   listPosts,
   updatePost,
@@ -18,7 +18,7 @@ router.get("/", optionalAuthGuard, listPosts);
 router.get("/:id", optionalAuthGuard, getPost);
 
 // Auth talab qilinadigan endpointlar
-router.post("/", authGuard, validateSchema(CreatePostSchema), createPost);
+router.post("/", authGuard, validateSchema(CreatePostSchema), createPostHandler);
 router.patch("/:id", authGuard, validateSchema(UpdatePostSchema), updatePost);
 router.delete("/:id", authGuard, deletePost);
 

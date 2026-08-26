@@ -3,13 +3,16 @@ import type { CreatePostInput, UpdatePostInput } from "@repo/shared";
 import { ListPostsQuerySchema } from "@repo/shared";
 import * as postsService from "../services/posts.service.js";
 
-// POST /api/posts — validateSchema(CreatePostSchema) route'da bajariladi
-export async function createPost(req: Request, res: Response, next: NextFunction) {
+// POST /posts — authGuard + validateSchema(CreatePostSchema) route'da bajariladi
+export async function createPostHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const authorId = req.user!.userId;
     const post = await postsService.createPost(authorId, req.body as CreatePostInput);
 
-    return res.status(201).json({ success: true, data: post });
+    return res.status(201).json({
+      success: true,
+      data: { id: post.id, status: post.status },
+    });
   } catch (error) {
     next(error);
     return;
