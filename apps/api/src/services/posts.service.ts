@@ -1,12 +1,8 @@
 import { Prisma } from "@prisma/client";
-import type {
-  CreatePostInput,
-  ListPostsQuery,
-  UpdatePostInput,
-} from "@repo/shared";
+import type { CreatePostInput, ListPostsQuery, UpdatePostInput } from "@repo/shared";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/AppError.js";
-import { enqueueImageProcessingJob } from "src/queues/image-processing.queue.js";
+import { enqueueImageProcessingJob } from "../queues/image-processing.queue.js";
 import { detectCodeLanguage } from "./code-language-detection.service.js";
 
 export class PostNotFoundError extends AppError {
@@ -60,8 +56,17 @@ function mapPost<T extends { tags: { tag: { name: string } }[] }>(post: T) {
  * jadvaliga bitta createMany chaqiruvi orqali (N marta alohida
  * create() o'rniga) qo'shiladi — skipDuplicates: true bilan, shunda
  * allaqachon mavjud bog'lanish qayta urinilganda xato tashlamaydi.
+ *
+ * `tx` — global `prisma` klient EMAS, balki $transaction() orqali
+ * ochilgan tranzaksiya klienti. Shu orqali Post yaratish va teglarni
+ * bog'lash bitta atomik operatsiyaga birlashadi: agar ikkalasidan
+ * biri xato bersa, ikkalasi ham (Post yozuvi ham) saqlanmaydi.
  */
-async function attachTags(postId: string, tagNames: string[]): Promise<void> {
+async function attachTags(
+  tx: Prisma.TransactionClient,
+  postId: string,
+  tagNames: string[],
+): Promise<void> {
   const normalizedNames = Array.from(
     new Set(
       tagNames
@@ -74,7 +79,7 @@ async function attachTags(postId: string, tagNames: string[]): Promise<void> {
 
   const tags = await Promise.all(
     normalizedNames.map((name) =>
-      prisma.tag.upsert({
+      tx.tag.upsert({
         where: { name },
         create: { name },
         update: {}, // tag allaqachon mavjud bo'lsa, hech narsa o'zgartirilmaydi
@@ -82,7 +87,7 @@ async function attachTags(postId: string, tagNames: string[]): Promise<void> {
     ),
   );
 
-  await prisma.postTag.createMany({
+  await tx.postTag.createMany({
     data: tags.map((tag) => ({ postId, tagId: tag.id })),
     skipDuplicates: true,
   });
@@ -92,19 +97,6 @@ export async function createPost(userId: string, dto: CreatePostInput) {
   const { tags, fileId, codeContent, codeLanguage, ...baseFields } = dto;
   // baseFields = { title, description, contentType, visibility, isNsfw } —
   // bularning barchasi Post modelidagi ustunlar bilan bevosita mos keladi.
-
-  const tagsCreateInput = tags?.length
-    ? {
-        create: tags.map((name) => ({
-          tag: {
-            connectOrCreate: {
-              where: { name },
-              create: { name },
-            },
-          },
-        })),
-      }
-    : undefined;
 
   if (dto.contentType === "IMAGE") {
     if (!fileId) {
@@ -120,29 +112,33 @@ export async function createPost(userId: string, dto: CreatePostInput) {
     // yo'l to'g'ridan-to'g'ri Post.mediaPath sifatida saqlanadi.
     const mediaPath = fileId;
 
-    const post = await prisma.post.create({
-      data: {
-        ...baseFields,
-        authorId: userId,
-        mediaPath,
-        // Thumbnail hali tayyor emas — worker (4-kun) uni generatsiya
-        // qilib, statusni PUBLISHED'ga o'tkazgunga qadar PROCESSING'da qoladi.
-        status: "PROCESSING",
-        tags: tagsCreateInput,
-      },
-      select: postWithTagsSelect,
+    // Post yaratish va teglarni bog'lash bitta atomik operatsiya:
+    // agar tag bog'lash bosqichida xato chiqsa, Post yozuvining o'zi
+    // ham saqlanmay qoladi (tranzaksiya to'liq rollback qilinadi).
+    const finalPost = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const post = await tx.post.create({
+        data: {
+          ...baseFields,
+          authorId: userId,
+          mediaPath,
+          // Thumbnail hali tayyor emas — worker (4-kun) uni generatsiya
+          // qilib, statusni PUBLISHED'ga o'tkazgunga qadar PROCESSING'da qoladi.
+          status: "PROCESSING",
+        },
+        select: postWithTagsSelect,
+      });
+
+      if (!tags?.length) return post;
+
+      await attachTags(tx, post.id, tags);
+      return tx.post.findUniqueOrThrow({ where: { id: post.id }, select: postWithTagsSelect });
     });
 
-    enqueueImageProcessingJob({ postId: post.id, mediaPath });
-
-    if (tags?.length) await attachTags(post.id, tags);
-
-    const finalPost = tags?.length
-      ? await prisma.post.findUniqueOrThrow({
-          where: { id: post.id },
-          select: postWithTagsSelect,
-        })
-      : post;
+    // MUHIM: navbatga faqat tranzaksiya MUVAFFAQIYATLI commit bo'lgandan
+    // keyin qo'shamiz — aks holda tranzaksiya rollback qilingan taqdirda
+    // (masalan tag bog'lashda xato chiqsa), mavjud bo'lmagan Post uchun
+    // fon ishi (worker) ishga tushib qolishi mumkin edi.
+    enqueueImageProcessingJob({ postId: finalPost.id, mediaPath });
 
     return mapPost(finalPost);
   }
@@ -162,21 +158,29 @@ export async function createPost(userId: string, dto: CreatePostInput) {
   const detectedLanguage = await detectCodeLanguage(codeContent);
   const resolvedLanguage = codeLanguage ?? detectedLanguage ?? undefined;
 
-  const post = await prisma.post.create({
-    data: {
-      ...baseFields,
-      authorId: userId,
-      codeContent,
-      codeLanguage: resolvedLanguage,
-      // mediaPath ataylab qo'yilmaydi — Prisma uni null qoldiradi,
-      // chunki CODE post'da diskdagi media fayl mavjud emas.
-      status: "PUBLISHED",
-      tags: tagsCreateInput,
-    },
-    select: postWithTagsSelect,
+  // Post yaratish va teglarni bog'lash bitta atomik operatsiya (IMAGE
+  // shoxidagi bilan bir xil sabab: xato bo'lsa hech narsa saqlanmasin).
+  const finalPost = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const post = await tx.post.create({
+      data: {
+        ...baseFields,
+        authorId: userId,
+        codeContent,
+        codeLanguage: resolvedLanguage,
+        // mediaPath ataylab qo'yilmaydi — Prisma uni null qoldiradi,
+        // chunki CODE post'da diskdagi media fayl mavjud emas.
+        status: "PUBLISHED",
+      },
+      select: postWithTagsSelect,
+    });
+
+    if (!tags?.length) return post;
+
+    await attachTags(tx, post.id, tags);
+    return tx.post.findUniqueOrThrow({ where: { id: post.id }, select: postWithTagsSelect });
   });
 
-  return mapPost(post);
+  return mapPost(finalPost);
 }
 
 export async function getPostById(id: string) {
@@ -221,15 +225,8 @@ export async function listPosts(query: ListPostsQuery) {
   return { items, nextCursor };
 }
 
-export async function updatePost(
-  id: string,
-  authorId: string,
-  input: UpdatePostInput,
-) {
-  const existing = await prisma.post.findUnique({
-    where: { id },
-    select: { authorId: true },
-  });
+export async function updatePost(id: string, authorId: string, input: UpdatePostInput) {
+  const existing = await prisma.post.findUnique({ where: { id }, select: { authorId: true } });
   if (!existing) throw new PostNotFoundError();
   if (existing.authorId !== authorId) throw new PostForbiddenError();
 
@@ -257,10 +254,7 @@ export async function updatePost(
 }
 
 export async function deletePost(id: string, authorId: string) {
-  const existing = await prisma.post.findUnique({
-    where: { id },
-    select: { authorId: true },
-  });
+  const existing = await prisma.post.findUnique({ where: { id }, select: { authorId: true } });
   if (!existing) throw new PostNotFoundError();
   if (existing.authorId !== authorId) throw new PostForbiddenError();
 
