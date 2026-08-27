@@ -1,7 +1,10 @@
 import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../lib/prisma.js";
-import { ensureUserUploadDir, readStorageFile } from "../services/local-storage.service.js";
+import {
+  ensureUserUploadDir,
+  readStorageFile,
+} from "../services/local-storage.service.js";
 import { registerJobHandler } from "./job-queue.js";
 
 export const IMAGE_PROCESSING_JOB_TYPE = "image-processing";
@@ -14,7 +17,9 @@ export interface ImageProcessingJobPayload {
 const THUMBNAIL_WIDTHS = [300, 800] as const;
 const THUMBNAIL_QUALITY = 80;
 
-async function processImageJob(payload: ImageProcessingJobPayload): Promise<void> {
+async function processImageJob(
+  payload: ImageProcessingJobPayload,
+): Promise<void> {
   const { postId, mediaPath } = payload;
 
   const userId = path.dirname(mediaPath);
@@ -43,6 +48,7 @@ async function processImageJob(payload: ImageProcessingJobPayload): Promise<void
     );
 
     const thumbnailPath = thumbnailRelativePathByWidth[300];
+    const largeMediaPath = thumbnailRelativePathByWidth[800];
 
     await prisma.post.update({
       where: { id: postId },
@@ -50,6 +56,7 @@ async function processImageJob(payload: ImageProcessingJobPayload): Promise<void
         width: metadata.width ?? null,
         height: metadata.height ?? null,
         thumbnailPath,
+        mediaPath: largeMediaPath,
         status: "PUBLISHED",
       },
     });
@@ -77,4 +84,7 @@ async function processImageJob(payload: ImageProcessingJobPayload): Promise<void
   }
 }
 
-registerJobHandler<ImageProcessingJobPayload>(IMAGE_PROCESSING_JOB_TYPE, processImageJob);
+registerJobHandler<ImageProcessingJobPayload>(
+  IMAGE_PROCESSING_JOB_TYPE,
+  processImageJob,
+);
