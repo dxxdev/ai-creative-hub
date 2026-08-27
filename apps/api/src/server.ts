@@ -10,6 +10,7 @@ import { env } from "./config/env.js";
 import "./lib/redis.js";
 import "./queues/email.queue.js";
 import cookieParser from "cookie-parser";
+import "./queues/image-processing.worker.js"; // image-processing worker'ni ro'yxatdan o'tkazish (side-effect import)
 
 const app = express();
 

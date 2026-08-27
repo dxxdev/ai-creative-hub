@@ -2,7 +2,8 @@ import { Prisma } from "@prisma/client";
 import type { CreatePostInput, ListPostsQuery, UpdatePostInput } from "@repo/shared";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/AppError.js";
-import { enqueueImageProcessingJob } from "../queues/image-processing.queue.js";
+import { enqueue } from "../queues/job-queue.js";
+import { IMAGE_PROCESSING_JOB_TYPE } from "../queues/image-processing.worker.js";
 import { detectCodeLanguage } from "./code-language-detection.service.js";
 
 export class PostNotFoundError extends AppError {
@@ -138,7 +139,7 @@ export async function createPost(userId: string, dto: CreatePostInput) {
     // keyin qo'shamiz — aks holda tranzaksiya rollback qilingan taqdirda
     // (masalan tag bog'lashda xato chiqsa), mavjud bo'lmagan Post uchun
     // fon ishi (worker) ishga tushib qolishi mumkin edi.
-    enqueueImageProcessingJob({ postId: finalPost.id, mediaPath });
+    enqueue(IMAGE_PROCESSING_JOB_TYPE, { postId: finalPost.id, mediaPath });
 
     return mapPost(finalPost);
   }

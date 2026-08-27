@@ -15,7 +15,7 @@ import { env } from "../config/env.js";
 // UPLOAD_DIR .env'da nisbiy (masalan "./storage/uploads") yoki absolyut
 // bo'lishi mumkin; process.cwd() = apps/api paketining ildiz papkasi
 // (npm/pnpm skriptlar shu yerdan ishga tushiriladi).
-const UPLOAD_ROOT = path.resolve(process.cwd(), env.UPLOAD_DIR);
+export const UPLOAD_ROOT = path.resolve(process.cwd(), env.UPLOAD_DIR);
 
 /**
  * Berilgan userId uchun yuklash papkasini (agar mavjud bo'lmasa) yaratadi
