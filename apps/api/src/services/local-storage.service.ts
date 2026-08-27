@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { env } from "../config/env.js";
 
@@ -87,4 +87,23 @@ function assertSafePathSegment(value: string, fieldName: string): string {
 function sanitizeExtension(ext: string): string {
   const cleaned = ext.toLowerCase().replace(/[^a-z0-9.]/g, "");
   return /^\.[a-z0-9]+$/.test(cleaned) ? cleaned : "";
+}
+
+/**
+ * DB'da saqlangan nisbiy disk yo'lini (masalan "{userId}/xyz.png")
+ * to'liq absolyut fayl yo'liga aylantiradi — diskdan o'qish/yozish
+ * uchun ishlatiladi. toRelativeStoragePath'ning teskarisi.
+ */
+export function toAbsoluteStoragePath(relativeStoragePath: string): string {
+  return path.join(UPLOAD_ROOT, relativeStoragePath);
+}
+
+/**
+ * DB'da saqlangan nisbiy disk yo'li (masalan Post.mediaPath) bo'yicha
+ * faylni diskdan Buffer sifatida o'qiydi. Worker'lar (masalan
+ * image-processing.worker.ts) asl faylni qayta ishlashdan oldin shu
+ * funksiya orqali o'qiydi.
+ */
+export async function readStorageFile(relativeStoragePath: string): Promise<Buffer> {
+  return readFile(toAbsoluteStoragePath(relativeStoragePath));
 }
