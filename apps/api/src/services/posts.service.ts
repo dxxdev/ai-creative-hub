@@ -1,5 +1,9 @@
 import { Prisma } from "@prisma/client";
-import type { CreatePostInput, ListPostsQuery, UpdatePostInput } from "@repo/shared";
+import type {
+  CreatePostInput,
+  ListPostsQuery,
+  UpdatePostInput,
+} from "@repo/shared";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/AppError.js";
 import { enqueueImageProcessingJob } from "src/queues/image-processing.queue.js";
@@ -44,6 +48,44 @@ const postWithTagsSelect = {
 function mapPost<T extends { tags: { tag: { name: string } }[] }>(post: T) {
   const { tags, ...rest } = post;
   return { ...rest, tags: tags.map((t) => t.tag.name) };
+}
+
+/**
+ * Berilgan `postId`ga `tagNames` ro'yxatidagi teglarni bog'laydi.
+ *
+ * Har bir tag nomi lowercase + trim orqali normalizatsiya qilinadi
+ * (masalan " AI " va "ai" bir xil tag sifatida ko'riladi), so'ng
+ * Tag jadvalida upsert qilinadi (mavjud bo'lsa topiladi, bo'lmasa
+ * yangi yaratiladi). Nihoyat, Post <-> Tag bog'lanishlari PostTag
+ * jadvaliga bitta createMany chaqiruvi orqali (N marta alohida
+ * create() o'rniga) qo'shiladi — skipDuplicates: true bilan, shunda
+ * allaqachon mavjud bog'lanish qayta urinilganda xato tashlamaydi.
+ */
+async function attachTags(postId: string, tagNames: string[]): Promise<void> {
+  const normalizedNames = Array.from(
+    new Set(
+      tagNames
+        .map((name) => name.trim().toLowerCase())
+        .filter((name) => name.length > 0),
+    ),
+  );
+
+  if (normalizedNames.length === 0) return;
+
+  const tags = await Promise.all(
+    normalizedNames.map((name) =>
+      prisma.tag.upsert({
+        where: { name },
+        create: { name },
+        update: {}, // tag allaqachon mavjud bo'lsa, hech narsa o'zgartirilmaydi
+      }),
+    ),
+  );
+
+  await prisma.postTag.createMany({
+    data: tags.map((tag) => ({ postId, tagId: tag.id })),
+    skipDuplicates: true,
+  });
 }
 
 export async function createPost(userId: string, dto: CreatePostInput) {
@@ -93,7 +135,16 @@ export async function createPost(userId: string, dto: CreatePostInput) {
 
     enqueueImageProcessingJob({ postId: post.id, mediaPath });
 
-    return mapPost(post);
+    if (tags?.length) await attachTags(post.id, tags);
+
+    const finalPost = tags?.length
+      ? await prisma.post.findUniqueOrThrow({
+          where: { id: post.id },
+          select: postWithTagsSelect,
+        })
+      : post;
+
+    return mapPost(finalPost);
   }
 
   // CODE (va V1 doirasidan tashqari boshqa content turlari uchun
@@ -170,8 +221,15 @@ export async function listPosts(query: ListPostsQuery) {
   return { items, nextCursor };
 }
 
-export async function updatePost(id: string, authorId: string, input: UpdatePostInput) {
-  const existing = await prisma.post.findUnique({ where: { id }, select: { authorId: true } });
+export async function updatePost(
+  id: string,
+  authorId: string,
+  input: UpdatePostInput,
+) {
+  const existing = await prisma.post.findUnique({
+    where: { id },
+    select: { authorId: true },
+  });
   if (!existing) throw new PostNotFoundError();
   if (existing.authorId !== authorId) throw new PostForbiddenError();
 
@@ -199,7 +257,10 @@ export async function updatePost(id: string, authorId: string, input: UpdatePost
 }
 
 export async function deletePost(id: string, authorId: string) {
-  const existing = await prisma.post.findUnique({ where: { id }, select: { authorId: true } });
+  const existing = await prisma.post.findUnique({
+    where: { id },
+    select: { authorId: true },
+  });
   if (!existing) throw new PostNotFoundError();
   if (existing.authorId !== authorId) throw new PostForbiddenError();
 
