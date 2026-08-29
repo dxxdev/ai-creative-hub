@@ -6,6 +6,7 @@ import {
   readStorageFile,
 } from "../services/local-storage.service.js";
 import { registerJobHandler } from "./job-queue.js";
+import { emitPostProcessingStatus } from "../websocket/socket.js";
 
 export const IMAGE_PROCESSING_JOB_TYPE = "image-processing";
 
@@ -50,7 +51,7 @@ async function processImageJob(
     const thumbnailPath = thumbnailRelativePathByWidth[300];
     const largeMediaPath = thumbnailRelativePathByWidth[800];
 
-    await prisma.post.update({
+    const updatedPost = await prisma.post.update({
       where: { id: postId },
       data: {
         width: metadata.width ?? null,
@@ -59,11 +60,17 @@ async function processImageJob(
         mediaPath: largeMediaPath,
         status: "PUBLISHED",
       },
+      select: { authorId: true },
     });
 
     console.log(
       `✅ [image-processing] postId=${postId}: ${THUMBNAIL_WIDTHS.join("px, ")}px thumbnail'lar yaratildi (${userId}/)`,
     );
+
+    // Real-time bildirishnoma: postni yaratgan foydalanuvchining
+    // xonasiga ("user:{authorId}", agar u hozir onlayn bo'lsa)
+    // "tayyor" statusini yuboramiz.
+    emitPostProcessingStatus(updatedPost.authorId, { postId, status: "published" });
   } catch (error) {
     console.error(
       `❌ [image-processing] postId=${postId} uchun ishlov berishda xato:`,
@@ -71,10 +78,13 @@ async function processImageJob(
     );
 
     try {
-      await prisma.post.update({
+      const failedPost = await prisma.post.update({
         where: { id: postId },
         data: { status: "FAILED" },
+        select: { authorId: true },
       });
+
+      emitPostProcessingStatus(failedPost.authorId, { postId, status: "failed" });
     } catch (updateError) {
       console.error(
         `❌ [image-processing] postId=${postId} statusini FAILED'ga o'tkazishda ham xato:`,

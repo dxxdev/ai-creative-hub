@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-store";
+import { SocketProvider } from "@/components/socket-provider";
 
 export const metadata: Metadata = {
   title: "AI Creative Hub",
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="uz">
       <body className="antialiased">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <SocketProvider>{children}</SocketProvider>
+        </AuthProvider>
       </body>
     </html>
   );

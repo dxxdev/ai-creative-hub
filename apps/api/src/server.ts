@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import { createServer } from "node:http";
 import routes from "./routes/index.js";
 import postsRouter from "./routes/posts.routes.js";
 import mediaRouter from "./routes/media.routes.js";
@@ -11,6 +12,7 @@ import "./lib/redis.js";
 import "./queues/email.queue.js";
 import cookieParser from "cookie-parser";
 import "./queues/image-processing.worker.js"; // image-processing worker'ni ro'yxatdan o'tkazish (side-effect import)
+import { initSocket } from "./websocket/socket.js";
 
 const app = express();
 
@@ -33,7 +35,15 @@ app.use('/media', mediaRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-app.listen(env.PORT, () => {
+// MUHIM: Socket.IO tashqi xizmat sifatida emas, aynan shu Express ilovasi
+// ishlatadigan HTTP serverga o'rnatiladi — shuning uchun app.listen() o'rniga
+// avval xom node:http serverini yaratamiz, keyin uni ham Express'ga (HTTP
+// so'rovlar uchun), ham Socket.IO'ga (WebSocket ulanishlar uchun) beramiz.
+const httpServer = createServer(app);
+
+initSocket(httpServer);
+
+httpServer.listen(env.PORT, () => {
   console.log(
     `✅ API server ishga tushdi (${env.NODE_ENV}): http://localhost:${env.PORT}`
   );
