@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/AppError.js";
 import { enqueue } from "../queues/job-queue.js";
 import { IMAGE_PROCESSING_JOB_TYPE } from "../queues/image-processing.worker.js";
-import { detectCodeLanguage } from "./code-language-detection.service.js";
+import { detectLanguage } from "./language-detection.service.js";
 
 export class PostNotFoundError extends AppError {
   constructor() {
@@ -156,8 +156,7 @@ export async function createPost(userId: string, dto: CreatePostInput) {
   // Til aniqlash (5-kun): hozircha stub — foydalanuvchi ko'rsatgan
   // codeLanguage ustunlik qiladi, aniqlash natijasi faqat u
   // ko'rsatilmagan holatda zaxira (fallback) sifatida ishlatiladi.
-  const detectedLanguage = await detectCodeLanguage(codeContent);
-  const resolvedLanguage = codeLanguage ?? detectedLanguage ?? undefined;
+  const resolvedLanguage = detectLanguage(codeContent, codeLanguage);
 
   // Post yaratish va teglarni bog'lash bitta atomik operatsiya (IMAGE
   // shoxidagi bilan bir xil sabab: xato bo'lsa hech narsa saqlanmasin).
