@@ -1,61 +1,118 @@
+import type { Server as HttpServer } from "node:http";
+import { Server as SocketIOServer, type Socket } from "socket.io";
+import { SOCKET_EVENTS, type PostProcessingStatusEvent } from "@repo/shared";
+import { verifyAccessToken } from "../services/token.service.js";
+
 /**
- * apps/web/lib/socket.ts
+ * apps/api/src/websocket/socket.ts
  *
- * Butun frontend bo'ylab ishlatiladigan yagona (singleton) Socket.IO
- * client. Backend'dagi apps/api/src/websocket/socket.ts bilan bir xil
- * server — Express HTTP serveriga o'rnatilgan, alohida WebSocket xizmati
- * emas — shuning uchun bazaviy URL xuddi `lib/api-client.ts`dagi kabi
- * `NEXT_PUBLIC_API_URL`dan olinadi.
+ * Real-time bildirishnomalar uchun Socket.IO server.
  *
- * Ulanish faqat foydalanuvchi tizimga kirgan (access token mavjud)
- * bo'lganda ochiladi: token handshake'da `auth.token` sifatida
- * yuboriladi, backend uni tekshirib, socketni foydalanuvchining shaxsiy
- * xonasiga ("user:{userId}") qo'shadi.
+ * MUHIM: bu — tashqi xizmat EMAS. Socket.IO server Express ilovasi
+ * ishlatayotgan bitta HTTP serverga (node:http) to'g'ridan-to'g'ri
+ * o'rnatiladi (server.ts'da `initSocket(httpServer)` orqali) — alohida
+ * process, port yoki infratuzilma talab qilinmaydi.
+ *
+ * XONALAR (rooms): har bir ulangan client, JWT access token orqali
+ * autentifikatsiyadan o'tgach, avtomatik ravishda faqat o'ziga tegishli
+ * `user:{userId}` xonasiga qo'shiladi.
  */
 
-import { Server as SocketIOServer, type Socket } from "socket.io";
+let io: SocketIOServer | null = null;
 
-let socket: Socket | null = null;
+function userRoom(userId: string): string {
+  return `user:${userId}`;
+}
 
-function getSocketBaseUrl(): string {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+/** handshake'dan JWT access tokenni oladi: `auth.token` yoki `Authorization: Bearer <token>` header. */
+function extractToken(socket: Socket): string | undefined {
+  const authToken = socket.handshake.auth?.token as string | undefined;
+  if (authToken) return authToken;
 
-  if (!baseUrl) {
-    throw new Error(
-      "NEXT_PUBLIC_API_URL aniqlanmagan. Iltimos, .env.local faylini apps/web/.env.local.example namunasiga qarab to'ldiring.",
-    );
+  const header = socket.handshake.headers.authorization;
+  if (header?.startsWith("Bearer ")) {
+    return header.slice("Bearer ".length).trim();
   }
 
-  return baseUrl.replace(/\/+$/, "");
+  return undefined;
 }
 
 /**
- * Berilgan access token bilan socket ulanishini o'rnatadi (agar hali
- * ulanmagan bo'lsa) va uni qaytaradi. Allaqachon ulangan bo'lsa, xuddi
- * shu instansiya qaytariladi — har bir chaqiruvda yangi ulanish
- * ochilmaydi.
+ * Socket.IO serverni berilgan HTTP serverga o'rnatadi va ishga tushiradi.
+ * `server.ts` ichida, `httpServer.listen(...)`dan oldin bir marta
+ * chaqiriladi.
  */
-export function connectSocket(accessToken: string): Socket {
-  if (socket?.connected) return socket;
-
-  socket = io(getSocketBaseUrl(), {
-    auth: { token: accessToken },
-    withCredentials: true,
-    autoConnect: true,
-    // Access token ~15 daqiqada eskiradi; ulanish shu vaqt ichida
-    // uzilib qolsa, socket.io o'zi eksponensial backoff bilan qayta
-    // ulanishga urinadi (standart sozlamalar yetarli).
+export function initSocket(httpServer: HttpServer): SocketIOServer {
+  io = new SocketIOServer(httpServer, {
+    cors: {
+      // MUHIM: server.ts'dagi Express CORS sozlamasi bilan bir xil origin.
+      origin: "http://localhost:3001",
+      credentials: true,
+    },
   });
 
-  return socket;
+  // Handshake middleware: har bir ulanish urinishida access tokenni
+  // tekshiradi. Token yaroqsiz/yo'q bo'lsa, ulanishning o'zi rad etiladi
+  // (client "connect_error" eventini oladi).
+  io.use((socket, next) => {
+    const token = extractToken(socket);
+
+    if (!token) {
+      next(new Error("Access token topilmadi"));
+      return;
+    }
+
+    try {
+      const payload = verifyAccessToken(token);
+      socket.data.userId = payload.userId;
+      next();
+    } catch {
+      next(new Error("Access token yaroqsiz yoki muddati tugagan"));
+    }
+  });
+
+  io.on("connection", (socket: Socket) => {
+    const userId = socket.data.userId as string;
+    socket.join(userRoom(userId));
+
+    console.log(`🔌 Socket ulandi: userId=${userId}, socketId=${socket.id}`);
+
+    socket.on("disconnect", (reason) => {
+      console.log(`🔌 Socket uzildi: userId=${userId}, sabab=${reason}`);
+    });
+  });
+
+  console.log("✅ Socket.IO server ishga tushdi (Express HTTP serveriga o'rnatilgan)");
+
+  return io;
 }
 
-/** Joriy socket ulanishini yopadi va tozalaydi (masalan logout yoki sessiya tugaganda). */
-export function disconnectSocket(): void {
-  socket?.disconnect();
-  socket = null;
+/**
+ * Berilgan foydalanuvchining xonasiga (uning barcha ochiq ulanishlariga)
+ * `post:processing_status` eventini yuboradi (masalan image-processing
+ * worker tugagach). Agar Socket.IO hali ishga tushmagan bo'lsa yoki
+ * foydalanuvchi hech qanday ulanishga ega bo'lmasa (offline), xatosiz jim
+ * o'tkazib yuboriladi — real-time bildirishnoma faqat "bonus" hisoblanadi,
+ * asosiy oqim (Post statusini DB'da yangilash) buning bilan bog'liq emas.
+ */
+export function emitPostProcessingStatus(
+  userId: string,
+  payload: PostProcessingStatusEvent,
+): void {
+  if (!io) {
+    console.warn(
+      `⚠️  Socket.IO hali ishga tushmagan, "${SOCKET_EVENTS.POST_PROCESSING_STATUS}" event yuborilmadi (userId=${userId})`,
+    );
+    return;
+  }
+
+  io.to(userRoom(userId)).emit(SOCKET_EVENTS.POST_PROCESSING_STATUS, payload);
 }
 
-export function getSocket(): Socket | null {
-  return socket;
+/** Kerak bo'lganda xom Socket.IO server instansiyasiga to'g'ridan-to'g'ri kirish uchun. */
+export function getIO(): SocketIOServer {
+  if (!io) {
+    throw new Error("Socket.IO hali ishga tushirilmagan (initSocket() chaqirilmagan).");
+  }
+  return io;
 }

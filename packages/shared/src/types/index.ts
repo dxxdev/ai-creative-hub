@@ -1,3 +1,4 @@
 export * from "./user.js";
 export * from "./auth.js";
 export * from "./post.types.js";
+export * from "./socket.types.js";
