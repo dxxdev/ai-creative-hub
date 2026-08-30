@@ -119,10 +119,11 @@ export type UpdatePostInput = z.infer<typeof UpdatePostSchema>;
 
 export const ListPostsQuerySchema = z.object({
   cursor: z.string().uuid().optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(20),
+  limit: z.coerce.number().int().min(1).max(50).default(24),
   contentType: SupportedContentTypeSchema.optional(),
   authorId: z.string().uuid().optional(),
   tag: z.string().optional(),
+  sortBy: z.enum(["recent", "popular"]).default("recent"),
 });
 export type ListPostsQuery = z.infer<typeof ListPostsQuerySchema>;
 
@@ -153,4 +154,42 @@ export const PostResponseSchema = z.object({
   createdAt: z.date(),
   updatedAt: z.date(),
 });
+
 export type PostResponse = z.infer<typeof PostResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// FEED ITEM — GET /posts (feed) uchun YENGILROQ shakl.
+//
+// PostResponse'dan farqi: og'ir maydonlar (codeContent, codeHighlightHtml)
+// bu yerda YO'Q — feed'da bitta sahifada o'nlab post ko'rsatiladi, har
+// birining to'liq kod matni/HTML'ini yuklab olish behuda trafik bo'lardi
+// (bular faqat GET /posts/:id — bitta postni to'liq ko'rish paytida kerak).
+//
+// mediaUrl/thumbnailUrl — PostResponse.mediaPath/thumbnailPath'dan ATAYLAB
+// boshqacha nomlangan: bu yerdagi qiymatlar allaqachon TO'LIQ, ishlatishga
+// tayyor URL (masalan "http://localhost:4000/uploads/{userId}/xyz.webp"),
+// PostResponse'dagi kabi diskka nisbiy xom yo'l EMAS.
+// ---------------------------------------------------------------------------
+
+export const PostFeedItemSchema = z.object({
+  id: z.string().uuid(),
+  authorId: z.string().uuid(),
+  title: z.string(),
+  description: z.string().nullable(),
+  contentType: ContentTypeSchema,
+  visibility: PostVisibilitySchema,
+  status: PostStatusSchema,
+  mediaUrl: z.string().nullable(),
+  thumbnailUrl: z.string().nullable(),
+  width: z.number().nullable(),
+  height: z.number().nullable(),
+  codeLanguage: z.string().nullable(),
+  viewCount: z.number(),
+  likeCount: z.number(),
+  remixCount: z.number(),
+  isNsfw: z.boolean(),
+  tags: z.array(z.string()),
+  createdAt: z.date(),
+});
+
+export type PostFeedItem = z.infer<typeof PostFeedItemSchema>;

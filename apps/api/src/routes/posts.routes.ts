@@ -6,7 +6,7 @@ import { optionalAuthGuard } from "../middlewares/optionalAuthGuard.js";
 import {
   createPostHandler,
   getPost,
-  listPosts,
+  listPostsHandler,
   updatePost,
   deletePost,
 } from "../controllers/posts.controller.js";
@@ -14,7 +14,7 @@ import {
 const router = Router();
 
 // Public/optional-auth endpointlar (PRIVATE post tekshiruvi uchun optionalAuthGuard kerak)
-router.get("/", optionalAuthGuard, listPosts);
+router.get("/", optionalAuthGuard, listPostsHandler);
 router.get("/:id", optionalAuthGuard, getPost);
 
 // Auth talab qilinadigan endpointlar

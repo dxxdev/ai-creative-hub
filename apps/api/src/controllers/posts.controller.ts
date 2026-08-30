@@ -43,9 +43,9 @@ export async function getPost(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-// GET /api/posts — validateSchema faqat req.body'ni tekshiradi, shuning uchun
+// GET /posts — validateSchema faqat req.body'ni tekshiradi, shuning uchun
 // query-string bu yerda alohida safeParse qilinadi (limit uchun coerce.number() kerak)
-export async function listPosts(req: Request, res: Response, next: NextFunction) {
+export async function listPostsHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const parsed = ListPostsQuerySchema.safeParse(req.query);
     if (!parsed.success) {
@@ -56,12 +56,11 @@ export async function listPosts(req: Request, res: Response, next: NextFunction)
       });
     }
 
-    const result = await postsService.listPosts(parsed.data);
+    const result = await postsService.findMany(parsed.data);
 
     return res.status(200).json({
       success: true,
-      data: result.items,
-      nextCursor: result.nextCursor,
+      data: result, // { items, nextCursor, totalCount }
     });
   } catch (error) {
     next(error);
