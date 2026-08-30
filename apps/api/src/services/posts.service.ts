@@ -4,7 +4,8 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/AppError.js";
 import { enqueue } from "../queues/job-queue.js";
 import { IMAGE_PROCESSING_JOB_TYPE } from "../queues/image-processing.worker.js";
-import { detectLanguage } from "./language-detection.service.js";
+import { detectCodeLanguage } from "./code-language-detection.service.js";
+import { highlightCode } from "./language-detection.service.js";
 
 export class PostNotFoundError extends AppError {
   constructor() {
@@ -33,6 +34,7 @@ const postWithTagsSelect = {
   height: true,
   codeContent: true,
   codeLanguage: true,
+  codeHighlightHtml: true,
   viewCount: true,
   likeCount: true,
   remixCount: true,
@@ -156,7 +158,20 @@ export async function createPost(userId: string, dto: CreatePostInput) {
   // Til aniqlash (5-kun): hozircha stub — foydalanuvchi ko'rsatgan
   // codeLanguage ustunlik qiladi, aniqlash natijasi faqat u
   // ko'rsatilmagan holatda zaxira (fallback) sifatida ishlatiladi.
-  const resolvedLanguage = detectLanguage(codeContent, codeLanguage);
+  const detectedLanguage = await detectCodeLanguage(codeContent);
+  const resolvedLanguage = codeLanguage ?? detectedLanguage ?? undefined;
+
+  // Syntax-highlight HTML'ni FAQAT shu yerda, post birinchi marta
+  // yaratilayotganda bir marta hisoblaymiz va natijani
+  // Post.codeHighlightHtml ustuniga saqlaymiz — kod o'zgarmas
+  // bo'lgani uchun keyingi barcha o'qishlarda bu tayyor HTML
+  // to'g'ridan-to'g'ri bazadan qaytariladi, qayta hisoblash shart
+  // bo'lmaydi (batafsili: language-detection.service.ts'dagi
+  // highlightCode() izohiga qarang).
+  const codeHighlightHtml = highlightCode(
+    codeContent,
+    resolvedLanguage ?? "plaintext",
+  );
 
   // Post yaratish va teglarni bog'lash bitta atomik operatsiya (IMAGE
   // shoxidagi bilan bir xil sabab: xato bo'lsa hech narsa saqlanmasin).
@@ -167,6 +182,7 @@ export async function createPost(userId: string, dto: CreatePostInput) {
         authorId: userId,
         codeContent,
         codeLanguage: resolvedLanguage,
+        codeHighlightHtml,
         // mediaPath ataylab qo'yilmaydi — Prisma uni null qoldiradi,
         // chunki CODE post'da diskdagi media fayl mavjud emas.
         status: "PUBLISHED",

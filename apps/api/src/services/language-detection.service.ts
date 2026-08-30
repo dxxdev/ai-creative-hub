@@ -101,3 +101,51 @@ export function detectLanguage(
 
   return result.language ?? FALLBACK_LANGUAGE;
 }
+
+/**
+ * Berilgan kodni highlight.js yordamida `<span class="hljs-...">`
+ * teglari bilan belgilangan HTML'ga aylantiradi (syntax highlighting).
+ *
+ * KESHLASH STRATEGIYASI: bu funksiyaning o'zi hech narsani keshlamaydi
+ * — har chaqirilganda qaytadan hisoblaydi. Buning o'rniga, CODE
+ * post'ning kodi (`codeContent`) yaratilgandan keyin o'zgarmasligi
+ * sababli (V1'da post tahrirlashda `codeContent` maydoni
+ * o'zgartirilmaydi — buni `UpdatePostSchema` ta'minlaydi), chaqiruvchi
+ * kod (`posts.service.ts`) bu funksiyani FAQAT post birinchi marta
+ * yaratilayotganda bir marta chaqiradi va natijani to'g'ridan-to'g'ri
+ * `Post.codeHighlightHtml` ustuniga saqlaydi. Shundan keyingi barcha
+ * o'qishlarda (`getPostById`, `listPosts`) bu tayyor HTML bazadan
+ * to'g'ridan-to'g'ri qaytariladi — highlight.js qayta ishga
+ * tushirilmaydi. Alohida keshlash xizmati (Redis va h.k.) shart emas,
+ * chunki Postgres jadvalining o'zi bu yerda "kesh" vazifasini
+ * bajaradi (bir marta yoz, cheksiz marta o'qi).
+ *
+ * @param code - highlight qilinishi kerak bo'lgan kod matni.
+ * @param language - highlight.js til nomi (odatda `detectLanguage()`
+ *   natijasi). highlight.js bu tilni tanimasa (masalan yozuv xatosi
+ *   yoki qo'llab-quvvatlanmaydigan nom bo'lsa), xato tashlash o'rniga
+ *   avtomatik aniqlashga (`highlightAuto`) tushiladi — shu bilan
+ *   noma'lum til nomi post yaratishni butunlay to'xtatib qo'ymaydi.
+ * @returns tayyor HTML satri, to'g'ridan-to'g'ri
+ *   `Post.codeHighlightHtml`ga saqlash uchun tayyor.
+ */
+export function highlightCode(code: string, language: string): string {
+  const normalizedLanguage = language?.trim();
+
+  if (normalizedLanguage && hljs.getLanguage(normalizedLanguage)) {
+    return hljs.highlight(code, {
+      language: normalizedLanguage,
+      // Foydalanuvchi kodi har doim ham 100% sintaktik to'g'ri
+      // bo'lavermaydi (masalan qisman/tugallanmagan kod parchasi).
+      // `ignoreIllegals: true` bo'lmasa, highlight.js bunday holatlarda
+      // xato tashlab, butun post yaratishni buzib qo'yishi mumkin edi.
+      ignoreIllegals: true,
+    }).value;
+  }
+
+  // Til noma'lum/tanilmagan bo'lsa (masalan bo'sh yoki xato nom),
+  // highlight.js'ning o'z avtomatik aniqlashiga tayanamiz — bu hech
+  // qachon xato tashlamaydi, faqat pastroq sifatli natija berishi
+  // mumkin (highlight'siz oddiy matn sifatida qaytishi mumkin).
+  return hljs.highlightAuto(code).value;
+}

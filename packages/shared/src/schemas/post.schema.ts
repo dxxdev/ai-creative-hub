@@ -144,6 +144,7 @@ export const PostResponseSchema = z.object({
   height: z.number().nullable(),
   codeContent: z.string().nullable(),
   codeLanguage: z.string().nullable(),
+  codeHighlightHtml: z.string().nullable(),
   viewCount: z.number(),
   likeCount: z.number(),
   remixCount: z.number(),
