@@ -1,11 +1,14 @@
 import { Prisma } from "@prisma/client";
-import type { CreatePostInput, ListPostsQuery, UpdatePostInput } from "@repo/shared";
+import type {
+  CreatePostInput,
+  ListPostsQuery,
+  UpdatePostInput,
+} from "@repo/shared";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/AppError.js";
 import { enqueue } from "../queues/job-queue.js";
 import { IMAGE_PROCESSING_JOB_TYPE } from "../queues/image-processing.worker.js";
-import { detectCodeLanguage } from "./code-language-detection.service.js";
-import { highlightCode } from "./language-detection.service.js";
+import { detectLanguage, highlightCode } from "./language-detection.service.js";
 
 export class PostNotFoundError extends AppError {
   constructor() {
@@ -118,24 +121,29 @@ export async function createPost(userId: string, dto: CreatePostInput) {
     // Post yaratish va teglarni bog'lash bitta atomik operatsiya:
     // agar tag bog'lash bosqichida xato chiqsa, Post yozuvining o'zi
     // ham saqlanmay qoladi (tranzaksiya to'liq rollback qilinadi).
-    const finalPost = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const post = await tx.post.create({
-        data: {
-          ...baseFields,
-          authorId: userId,
-          mediaPath,
-          // Thumbnail hali tayyor emas — worker (4-kun) uni generatsiya
-          // qilib, statusni PUBLISHED'ga o'tkazgunga qadar PROCESSING'da qoladi.
-          status: "PROCESSING",
-        },
-        select: postWithTagsSelect,
-      });
+    const finalPost = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const post = await tx.post.create({
+          data: {
+            ...baseFields,
+            authorId: userId,
+            mediaPath,
+            // Thumbnail hali tayyor emas — worker (4-kun) uni generatsiya
+            // qilib, statusni PUBLISHED'ga o'tkazgunga qadar PROCESSING'da qoladi.
+            status: "PROCESSING",
+          },
+          select: postWithTagsSelect,
+        });
 
-      if (!tags?.length) return post;
+        if (!tags?.length) return post;
 
-      await attachTags(tx, post.id, tags);
-      return tx.post.findUniqueOrThrow({ where: { id: post.id }, select: postWithTagsSelect });
-    });
+        await attachTags(tx, post.id, tags);
+        return tx.post.findUniqueOrThrow({
+          where: { id: post.id },
+          select: postWithTagsSelect,
+        });
+      },
+    );
 
     // MUHIM: navbatga faqat tranzaksiya MUVAFFAQIYATLI commit bo'lgandan
     // keyin qo'shamiz — aks holda tranzaksiya rollback qilingan taqdirda
@@ -158,9 +166,7 @@ export async function createPost(userId: string, dto: CreatePostInput) {
   // Til aniqlash (5-kun): hozircha stub — foydalanuvchi ko'rsatgan
   // codeLanguage ustunlik qiladi, aniqlash natijasi faqat u
   // ko'rsatilmagan holatda zaxira (fallback) sifatida ishlatiladi.
-  const detectedLanguage = await detectCodeLanguage(codeContent);
-  const resolvedLanguage = codeLanguage ?? detectedLanguage ?? undefined;
-
+  const resolvedLanguage = detectLanguage(codeContent, codeLanguage);
   // Syntax-highlight HTML'ni FAQAT shu yerda, post birinchi marta
   // yaratilayotganda bir marta hisoblaymiz va natijani
   // Post.codeHighlightHtml ustuniga saqlaymiz — kod o'zgarmas
@@ -168,33 +174,35 @@ export async function createPost(userId: string, dto: CreatePostInput) {
   // to'g'ridan-to'g'ri bazadan qaytariladi, qayta hisoblash shart
   // bo'lmaydi (batafsili: language-detection.service.ts'dagi
   // highlightCode() izohiga qarang).
-  const codeHighlightHtml = highlightCode(
-    codeContent,
-    resolvedLanguage ?? "plaintext",
-  );
+  const codeHighlightHtml = highlightCode(codeContent, resolvedLanguage);
 
   // Post yaratish va teglarni bog'lash bitta atomik operatsiya (IMAGE
   // shoxidagi bilan bir xil sabab: xato bo'lsa hech narsa saqlanmasin).
-  const finalPost = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    const post = await tx.post.create({
-      data: {
-        ...baseFields,
-        authorId: userId,
-        codeContent,
-        codeLanguage: resolvedLanguage,
-        codeHighlightHtml,
-        // mediaPath ataylab qo'yilmaydi — Prisma uni null qoldiradi,
-        // chunki CODE post'da diskdagi media fayl mavjud emas.
-        status: "PUBLISHED",
-      },
-      select: postWithTagsSelect,
-    });
+  const finalPost = await prisma.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      const post = await tx.post.create({
+        data: {
+          ...baseFields,
+          authorId: userId,
+          codeContent,
+          codeLanguage: resolvedLanguage,
+          codeHighlightHtml,
+          // mediaPath ataylab qo'yilmaydi — Prisma uni null qoldiradi,
+          // chunki CODE post'da diskdagi media fayl mavjud emas.
+          status: "PUBLISHED",
+        },
+        select: postWithTagsSelect,
+      });
 
-    if (!tags?.length) return post;
+      if (!tags?.length) return post;
 
-    await attachTags(tx, post.id, tags);
-    return tx.post.findUniqueOrThrow({ where: { id: post.id }, select: postWithTagsSelect });
-  });
+      await attachTags(tx, post.id, tags);
+      return tx.post.findUniqueOrThrow({
+        where: { id: post.id },
+        select: postWithTagsSelect,
+      });
+    },
+  );
 
   return mapPost(finalPost);
 }
@@ -241,8 +249,15 @@ export async function listPosts(query: ListPostsQuery) {
   return { items, nextCursor };
 }
 
-export async function updatePost(id: string, authorId: string, input: UpdatePostInput) {
-  const existing = await prisma.post.findUnique({ where: { id }, select: { authorId: true } });
+export async function updatePost(
+  id: string,
+  authorId: string,
+  input: UpdatePostInput,
+) {
+  const existing = await prisma.post.findUnique({
+    where: { id },
+    select: { authorId: true },
+  });
   if (!existing) throw new PostNotFoundError();
   if (existing.authorId !== authorId) throw new PostForbiddenError();
 
@@ -270,7 +285,10 @@ export async function updatePost(id: string, authorId: string, input: UpdatePost
 }
 
 export async function deletePost(id: string, authorId: string) {
-  const existing = await prisma.post.findUnique({ where: { id }, select: { authorId: true } });
+  const existing = await prisma.post.findUnique({
+    where: { id },
+    select: { authorId: true },
+  });
   if (!existing) throw new PostNotFoundError();
   if (existing.authorId !== authorId) throw new PostForbiddenError();
 
