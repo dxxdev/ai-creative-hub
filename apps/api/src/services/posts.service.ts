@@ -313,15 +313,12 @@ export async function findMany(
     ...(tag ? { tags: { some: { tag: { name: tag } } } } : {}),
   };
 
-  // Ikkinchi `id: "desc"` mezoni — determinizm uchun: agar bir nechta
-  // post bir xil `likeCount` (yoki millisekund darajasida bir xil
-  // `createdAt`) qiymatiga ega bo'lsa, tartiblash har so'rovda bir xil
-  // bo'lishini kafolatlaydi — aks holda cursor'li sahifalash chegara
-  // holatlarida (tenglik) post takrorlanishi yoki o'tkazib yuborilishi
-  // mumkin edi.
+  // "popular" tartiblash — HOZIRCHA oddiy variant: avval `likeCount`
+  // bo'yicha (asosiy "mashhurlik" signali), keyin `createdAt` bo'yicha
+  // (bir xil like'ga ega postlar orasida yangisi tepada chiqadi).
   const orderBy: Prisma.PostOrderByWithRelationInput[] =
     sortBy === "popular"
-      ? [{ likeCount: "desc" }, { id: "desc" }]
+      ? [{ likeCount: "desc" }, { createdAt: "desc" }, { id: "desc" }]
       : [{ createdAt: "desc" }, { id: "desc" }];
 
   const [rows, totalCount] = await Promise.all([
