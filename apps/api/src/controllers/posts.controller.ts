@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import type { CreatePostInput, UpdatePostInput } from "@repo/shared";
 import { ListPostsQuerySchema } from "@repo/shared";
 import * as postsService from "../services/posts.service.js";
+import { incrementPendingViewCount } from "../services/view-counter.service.js";
 
 // POST /posts — authGuard + validateSchema(CreatePostSchema) route'da bajariladi
 export async function createPostHandler(req: Request, res: Response, next: NextFunction) {
@@ -35,7 +36,13 @@ export async function getPost(req: Request, res: Response, next: NextFunction) {
       return res.status(404).json({ success: false, error: "Post topilmadi" });
     }
 
-    postsService.incrementViewCount(id).catch(() => void 0); // fire-and-forget
+    // MUHIM: har so'rovda to'g'ridan-to'g'ri DB'ga YOZMAYMIZ — buning
+    // o'rniga faqat shu server jarayoni xotirasidagi Map'ni +1
+    // oshiramiz (sinxron, juda tez). Haqiqiy Postgres yozuvi
+    // queues/sync-view-counts.job.ts'dagi node-cron job'i orqali
+    // davriy ravishda, batch tarzda amalga oshiriladi (batafsili:
+    // view-counter.service.ts'dagi izohga qarang).
+    incrementPendingViewCount(id);
 
     return res.status(200).json({ success: true, data: post });
   } catch (error) {

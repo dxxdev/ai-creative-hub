@@ -308,13 +308,6 @@ export async function findById(id: string, viewerId: string | null): Promise<Pos
   };
 }
 
-export async function incrementViewCount(id: string) {
-  await prisma.post.update({
-    where: { id },
-    data: { viewCount: { increment: 1 } },
-  });
-}
-
 /**
  * GET /posts (ommaviy feed) uchun YENGIL Prisma `select` — faqat feed
  * kartochkasi uchun kerakli maydonlar. `postWithTagsSelect`dan ATAYLAB
