@@ -1,5 +1,11 @@
 import { Prisma } from "@prisma/client";
-import type { CreatePostInput, ListPostsQuery, PostFeedItem, UpdatePostInput } from "@repo/shared";
+import type {
+  CreatePostInput,
+  ListPostsQuery,
+  PostDetail,
+  PostFeedItem,
+  UpdatePostInput,
+} from "@repo/shared";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/AppError.js";
 import { enqueue } from "../queues/job-queue.js";
@@ -48,6 +54,35 @@ function mapPost<T extends { tags: { tag: { name: string } }[] }>(post: T) {
   const { tags, ...rest } = post;
   return { ...rest, tags: tags.map((t) => t.tag.name) };
 }
+
+/**
+ * GET /posts/:id (bitta postni to'liq ko'rish) uchun `select` — muallif
+ * (id, username) va teglar bilan birga, `PostDetail`ni to'ldirish uchun
+ * kerakli barcha ustunlar. `authorId` va `visibility` DTO'ning o'zida
+ * ko'rinmasa ham (`PostDetail` tipida yo'q), `findById()` ichida
+ * PRIVATE-postga ruxsat tekshiruvi uchun kerak, shuning uchun select'ga
+ * kiritilgan.
+ */
+const postDetailSelect = {
+  id: true,
+  authorId: true,
+  title: true,
+  description: true,
+  contentType: true,
+  visibility: true,
+  mediaPath: true,
+  thumbnailPath: true,
+  width: true,
+  height: true,
+  codeContent: true,
+  codeLanguage: true,
+  codeHighlightHtml: true,
+  likeCount: true,
+  remixCount: true,
+  createdAt: true,
+  author: { select: { id: true, username: true } },
+  tags: { select: { tag: { select: { name: true } } } },
+} satisfies Prisma.PostSelect;
 
 /**
  * Berilgan `postId`ga `tagNames` ro'yxatidagi teglarni bog'laydi.
@@ -198,13 +233,79 @@ export async function createPost(userId: string, dto: CreatePostInput) {
   return mapPost(finalPost);
 }
 
-export async function getPostById(id: string) {
+/**
+ * Bitta postni to'liq (muallif, teglar, CODE bo'lsa tayyor
+ * `codeHighlightHtml`, va — foydalanuvchi tizimga kirgan bo'lsa —
+ * `viewerHasLiked` bilan) qaytaradi.
+ *
+ * @param id - qidirilayotgan post ID'si.
+ * @param viewerId - joriy so'rovni yuborayotgan foydalanuvchi ID'si,
+ *   yoki `null` (anonim/tizimga kirmagan). `optionalAuthGuard`
+ *   orqali `req.user`dan olinadi — token yo'q/yaroqsiz bo'lsa ham
+ *   xato tashlanmaydi, shunchaki `null` sifatida davom etiladi.
+ * @returns `PostDetail`, yoki quyidagi ikkala holatda ham `null`:
+ *   (1) bunday ID'li post umuman mavjud emas, (2) post `PRIVATE` va
+ *   `viewerId` uning muallifi emas. Ikkala holat ATAYLAB bir xil
+ *   natija (`null`) bilan ifodalanadi — chaqiruvchi (controller) buni
+ *   404'ga aylantiradi, shunda tashqi foydalanuvchi "bu ID band, lekin
+ *   private" va "bunday post umuman yo'q" o'rtasidagi farqni bila
+ *   olmaydi (privatlikni oshkor qilmaslik uchun standart amaliyot).
+ */
+export async function findById(id: string, viewerId: string | null): Promise<PostDetail | null> {
   const post = await prisma.post.findUnique({
     where: { id },
-    select: postWithTagsSelect,
+    select: postDetailSelect,
   });
 
-  return post ? mapPost(post) : null;
+  if (!post) return null;
+
+  if (post.visibility === "PRIVATE" && post.authorId !== viewerId) {
+    return null;
+  }
+
+  // Like tekshiruvi faqat foydalanuvchi tizimga kirgan bo'lsagina
+  // bajariladi — anonim so'rov uchun bazaga ortiqcha murojaat qilib
+  // o'tirmasdan, darhol `false` qaytariladi.
+  const viewerHasLiked = viewerId
+    ? (await prisma.like.findUnique({
+        where: { postId_userId: { postId: id, userId: viewerId } },
+        select: { userId: true },
+      })) !== null
+    : false;
+
+  return {
+    id: post.id,
+    title: post.title,
+    description: post.description,
+    thumbnailUrl: post.thumbnailPath ? toPublicUploadUrl(post.thumbnailPath) : null,
+    mediaUrl: post.mediaPath ? toPublicUploadUrl(post.mediaPath) : null,
+    contentType: post.contentType,
+    author: {
+      id: post.author.id,
+      username: post.author.username,
+      // User modelida hozircha avatarUrl ustuni yo'q (avatar yuklash
+      // funksiyasi V1 doirasidan tashqarida) — shu ustun qo'shilgach,
+      // shu yerni ham yangilang.
+      avatarUrl: null,
+    },
+    // codeHighlightHtml — allaqachon post yaratilganda BIR MARTA
+    // hisoblab, Post.codeHighlightHtml ustuniga saqlab qo'yilgan
+    // (posts.service.ts'dagi createPost'ga qarang). Bu yerda faqat
+    // bazadan o'qib, o'zgarishsiz qaytariladi — qayta hisoblanmaydi.
+    // IMAGE postlar uchun bu maydon DB'da tabiiy ravishda `null`
+    // bo'lgani sababli, "faqat CODE bo'lsa qo'sh" shartini alohida
+    // yozishning hojati yo'q — natija baribir bir xil.
+    codeContent: post.codeContent,
+    codeLanguage: post.codeLanguage,
+    codeHighlightHtml: post.codeHighlightHtml,
+    width: post.width,
+    height: post.height,
+    likeCount: post.likeCount,
+    remixCount: post.remixCount,
+    tags: post.tags.map((t: { tag: { name: string } }) => t.tag.name),
+    createdAt: post.createdAt.toISOString(),
+    viewerHasLiked,
+  };
 }
 
 export async function incrementViewCount(id: string) {
@@ -281,7 +382,7 @@ function mapToPostFeedItem<
  * Faqat `visibility: "PUBLIC"` va `status: "PUBLISHED"` postlar
  * qaytariladi — PROCESSING (hali worker tugatmagan), FAILED, PRIVATE
  * va UNLISTED postlar bu yerda hech qachon ko'rinmaydi (buni bittalab
- * ko'rish uchun alohida `getPostById` + ruxsat tekshiruvi bor).
+ * ko'rish uchun alohida `findById` + ruxsat tekshiruvi bor).
  *
  * SAHIFALASH: `take: limit + 1` bilan so'raladi — agar qaytgan qatorlar
  * soni `limit`dan ko'p bo'lsa (ya'ni "qo'shimcha" (limit+1)-elementning
@@ -316,6 +417,33 @@ export async function findMany(
   // "popular" tartiblash — HOZIRCHA oddiy variant: avval `likeCount`
   // bo'yicha (asosiy "mashhurlik" signali), keyin `createdAt` bo'yicha
   // (bir xil like'ga ega postlar orasida yangisi tepada chiqadi).
+  //
+  // Nega faqat likeCount (remixCount emas)? Prisma'ning `orderBy`si
+  // ustunlar ustida arifmetik amal (masalan `likeCount * 2 + remixCount`)
+  // bajarishni QO'LLAB-QUVVATLAMAYDI — buni faqat xom SQL (`$queryRaw`)
+  // yoki oldindan hisoblab qo'yilgan (materialized) alohida ustun orqali
+  // qilish mumkin. Shuning uchun V1'da faqat bitta signalga (likeCount)
+  // tayanamiz — bu "trending" emas, oddiy "eng ko'p like olgan"
+  // tartiblash, xolos.
+  //
+  // KELAJAKDA: haqiqiy "trending"/mashhurlik formulasi ancha
+  // murakkablashishi mumkin — masalan `remixCount`ni ham hisobga olish,
+  // vaqt bo'yicha "so'nish" (time decay — eski post abadiy tepada
+  // qolib ketmasligi uchun, Hacker News/Reddit "hot" formulasiga
+  // o'xshash), yoki ko'rishlar tezligi (view velocity) kabi mezonlar
+  // qo'shilishi mumkin. Bunday formula endi Prisma'ning oddiy `orderBy`
+  // massivi bilan ifodalanmaydi — yoki xom SQL so'rovi, yoki fon
+  // ishi (job) orqali davriy ravishda qayta hisoblanib, alohida
+  // `popularityScore` ustuniga saqlanadigan (keyin oddiy `orderBy:
+  // { popularityScore: "desc" }` bilan saralanadigan) yechimga o'tish
+  // kerak bo'ladi.
+  //
+  // Oxirgi `id: "desc"` mezoni — bularning ikkalasiga ham tegishli emas,
+  // sof texnik sabab: agar bir nechta post bir xil `likeCount`/`createdAt`
+  // qiymatiga ega bo'lsa (masalan millisekund darajasida bir vaqtda
+  // yaratilgan bo'lsa), tartiblash har so'rovda bir xil bo'lishini
+  // kafolatlaydi — aks holda cursor'li sahifalash chegara holatlarida
+  // (tenglik) post takrorlanishi yoki o'tkazib yuborilishi mumkin edi.
   const orderBy: Prisma.PostOrderByWithRelationInput[] =
     sortBy === "popular"
       ? [{ likeCount: "desc" }, { createdAt: "desc" }, { id: "desc" }]

@@ -45,6 +45,7 @@ export interface PostDetail extends PostSummary {
   mediaUrl: string | null;
   codeContent: string | null;
   codeLanguage: string | null;
+  codeHighlightHtml: string | null;
   width: number | null;
   height: number | null;
   tags: string[];

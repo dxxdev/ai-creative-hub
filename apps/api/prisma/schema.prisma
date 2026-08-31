@@ -44,6 +44,7 @@ model User {
 
   posts    Post[]
   sessions Session[]
+  likes    Like[]
 
   @@map("users")
 }
@@ -82,6 +83,7 @@ model Post {
   updatedAt DateTime @updatedAt
 
   tags PostTag[]
+  likes Like[]
 
   @@index([authorId])
   @@index([contentType, visibility, status, createdAt])
@@ -121,4 +123,23 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+/// GET /posts/:id'da `viewerHasLiked`ni aniqlash uchun kerakli minimal
+/// jadval. Like/unlike endpointlari (POST/DELETE) V1'ning shu bosqichida
+/// hali yozilmagan — bu model faqat "foydalanuvchi bu postni like
+/// bosganmi?" degan savolga javob berish uchun zarur bo'lgani sababli
+/// qo'shildi.
+model Like {
+  postId String
+  userId String
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([postId, userId])
+  @@index([userId])
+  @@map("likes")
 }

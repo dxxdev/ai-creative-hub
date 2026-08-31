@@ -23,14 +23,15 @@ export async function createPostHandler(req: Request, res: Response, next: NextF
 export async function getPost(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const post = await postsService.getPostById(id);
+    const viewerId = req.user?.userId ?? null;
+    const post = await postsService.findById(id, viewerId);
 
     if (!post) {
-      return res.status(404).json({ success: false, error: "Post topilmadi" });
-    }
-
-    // Private postlarni faqat muallif ko'ra oladi
-    if (post.visibility === "PRIVATE" && post.authorId !== req.user?.userId) {
+      // MUHIM: bu javob HAM post umuman mavjud emasligi, HAM u PRIVATE
+      // va viewerId muallif emasligi holatlarini QOPLAYDI — ikkalasi
+      // ham (findById() ichida) ataylab bir xil natija (`null`) bilan
+      // ifodalangan, shunda tashqi foydalanuvchi bu ikkisini farqlab
+      // bo'lmaydi (privatlikni oshkor qilmaslik uchun).
       return res.status(404).json({ success: false, error: "Post topilmadi" });
     }
 
