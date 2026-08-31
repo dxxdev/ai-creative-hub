@@ -9,7 +9,7 @@ import {
   updatePost,
   deletePost,
 } from "../controllers/posts.controller.js";
-import { postsErrorHandler, validatePostsSchema } from "src/middlewares/posts-response.middleware.js";
+import { validatePostsSchema, postsErrorHandler } from "../middlewares/posts-response.middleware.js";
 
 const router = Router();
 
