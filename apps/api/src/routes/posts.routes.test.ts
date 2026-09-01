@@ -202,4 +202,96 @@ describe("POST /posts va GET /posts/:id (integratsiya, haqiqiy DB)", () => {
       expect(res.body.data.author).toMatchObject({ id: testUserId });
     });
   });
+
+  // MUHIM: bu blok ATAYLAB o'zining ALOHIDA foydalanuvchisiga ega —
+  // yuqoridagi describe'lar ham `testUserId` ostida post yaratadi,
+  // agar shu bloк ham o'sha foydalanuvchidan foydalansa, sahifalash
+  // hisobi (24 + 6 = 30) boshqa testlar qo'shgan postlar hisobiga
+  // buzilardi. `GET /posts?authorId=...` filtri bilan birga, bu
+  // izolyatsiya sahifalash sonlarini har doim ANIQ 30 ta qilib
+  // ushlab turadi — boshqa describe'lar parallel/keyinroq post
+  // qo'shsa ham ta'sir qilmaydi.
+  describe("GET /posts (cursor-based sahifalash)", () => {
+    let paginationUserId = "";
+    const TOTAL_POSTS = 30;
+    const PAGE_LIMIT = 24;
+
+    beforeAll(async () => {
+      const user = await prisma.user.create({
+        data: {
+          email: `posts-pagination-test-${runSuffix}@example.test`,
+          username: `posts_pg_test_${runSuffix}`,
+          passwordHash: "not-used-in-this-test",
+          status: "ACTIVE",
+        },
+      });
+      paginationUserId = user.id;
+
+      // Sahifalash mantig'ini HTTP orqali emas, to'g'ridan-to'g'ri
+      // Prisma bilan tayyorlaymiz — 30 marta POST /posts yuborish
+      // (har biri o'z $transaction'iga ega) sekin va bu yerda ortiqcha
+      // bo'lardi, chunki biz posts.service.createPost()ni emas,
+      // aynan GET /posts'ning sahifalash (cursor/limit) mantig'ini
+      // tekshiryapmiz.
+      await Promise.all(
+        Array.from({ length: TOTAL_POSTS }, (_, i) =>
+          prisma.post.create({
+            data: {
+              authorId: paginationUserId,
+              title: `Sahifalash posti ${i + 1}`,
+              contentType: "CODE",
+              codeContent: `console.log(${i + 1});`,
+              visibility: "PUBLIC",
+              status: "PUBLISHED",
+            },
+          }),
+        ),
+      );
+    });
+
+    afterAll(async () => {
+      // Foydalanuvchini o'chirish kifoya — Post.authorId'dagi
+      // @onDelete: Cascade orqali barcha 30 post ham avtomatik
+      // o'chadi, alohida-alohida ID bo'yicha tozalash shart emas.
+      await prisma.user.delete({ where: { id: paginationUserId } });
+    });
+
+    it("limit=24 bilan chaqirilganda 1-sahifada 24 ta item va bo'sh bo'lmagan nextCursor qaytaradi", async () => {
+      const res = await request(app)
+        .get("/posts")
+        .query({ authorId: paginationUserId, limit: PAGE_LIMIT });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.items).toHaveLength(24);
+      expect(res.body.data.totalCount).toBe(TOTAL_POSTS);
+      expect(res.body.data.nextCursor).toEqual(expect.any(String));
+    });
+
+    it("2-sahifada (nextCursor bilan) qolgan 6 ta post qaytariladi va nextCursor endi null bo'ladi", async () => {
+      const firstPage = await request(app)
+        .get("/posts")
+        .query({ authorId: paginationUserId, limit: PAGE_LIMIT });
+
+      const secondPage = await request(app).get("/posts").query({
+        authorId: paginationUserId,
+        limit: PAGE_LIMIT,
+        cursor: firstPage.body.data.nextCursor,
+      });
+
+      expect(secondPage.status).toBe(200);
+      expect(secondPage.body.data.items).toHaveLength(TOTAL_POSTS - PAGE_LIMIT); // 30 - 24 = 6
+      expect(secondPage.body.data.nextCursor).toBeNull();
+      expect(secondPage.body.data.totalCount).toBe(TOTAL_POSTS);
+
+      // Ikkala sahifa birlashganda — aynan 30 ta, TAKRORLANMAGAN
+      // (cursor chegarasida bironta post ikki marta chiqmagan yoki
+      // tushib qolmagan) postni qamrab olishini tasdiqlaydi.
+      const firstPageIds = firstPage.body.data.items.map((p: { id: string }) => p.id);
+      const secondPageIds = secondPage.body.data.items.map((p: { id: string }) => p.id);
+      const allIds = new Set([...firstPageIds, ...secondPageIds]);
+
+      expect(allIds.size).toBe(TOTAL_POSTS);
+    });
+  });
 });
